@@ -1,0 +1,1009 @@
+<title>Fıstık Stratejisi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --paper:#F4F6F2;
+  --surface:#FFFFFF;
+  --surface-2:#EBEFE6;
+  --ink:#16201A;
+  --ink-2:#3A473C;
+  --muted:#6E7A6B;
+  --line:#D6DBD1;
+  --line-heavy:#16201A;
+  --accent:#4B6B2F;
+  --accent-soft:#E4EDD6;
+  --hot:#A82334;
+  --hot-soft:#F6E3E4;
+  --amber:#8A6212;
+  --amber-soft:#F5EBD3;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#111512;
+    --surface:#1A201B;
+    --surface-2:#232B24;
+    --ink:#E9EFE7;
+    --ink-2:#C0CBBE;
+    --muted:#8B9789;
+    --line:#2E3830;
+    --line-heavy:#5E6C5F;
+    --accent:#9CC06A;
+    --accent-soft:#26301D;
+    --hot:#E88491;
+    --hot-soft:#331C20;
+    --amber:#D6AC5A;
+    --amber-soft:#302716;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#111512;
+  --surface:#1A201B;
+  --surface-2:#232B24;
+  --ink:#E9EFE7;
+  --ink-2:#C0CBBE;
+  --muted:#8B9789;
+  --line:#2E3830;
+  --line-heavy:#5E6C5F;
+  --accent:#9CC06A;
+  --accent-soft:#26301D;
+  --hot:#E88491;
+  --hot-soft:#331C20;
+  --amber:#D6AC5A;
+  --amber-soft:#302716;
+}
+
+*{box-sizing:border-box}
+
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Newsreader","Iowan Old Style",Georgia,serif;
+  font-size:17.5px;
+  line-height:1.62;
+  margin:0;
+  -webkit-font-smoothing:antialiased;
+}
+
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px 120px}
+
+/* ---------- masthead ---------- */
+.masthead{
+  border-bottom:3px solid var(--line-heavy);
+  padding:56px 0 22px;
+  margin-bottom:8px;
+}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:11.5px;
+  font-weight:500;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+.masthead h1{
+  font-family:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
+  font-weight:800;
+  font-size:clamp(2.6rem,7vw,4.6rem);
+  line-height:.98;
+  letter-spacing:-.03em;
+  margin:.28em 0 .22em;
+  text-wrap:balance;
+  max-width:16ch;
+}
+.masthead .standfirst{
+  font-size:clamp(1.05rem,2.2vw,1.3rem);
+  color:var(--ink-2);
+  max-width:60ch;
+  margin:0;
+}
+.masthead .standfirst em{color:var(--accent);font-style:normal;font-weight:600}
+.meta-row{
+  display:flex;flex-wrap:wrap;gap:10px 28px;
+  margin-top:26px;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11.5px;letter-spacing:.06em;color:var(--muted);
+  text-transform:uppercase;
+}
+
+/* ---------- notice ---------- */
+.notice{
+  border:1px solid var(--line);
+  border-left:4px solid var(--hot);
+  background:var(--hot-soft);
+  padding:18px 22px;
+  margin:32px 0 0;
+  font-size:15.5px;
+  line-height:1.55;
+  color:var(--ink);
+}
+.notice .lbl{
+  display:block;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--hot);font-weight:600;margin-bottom:7px;
+}
+.notice code{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.86em;background:var(--surface);padding:1px 5px;border:1px solid var(--line);
+}
+
+/* ---------- layout ---------- */
+.shell{display:block}
+@media (min-width:1000px){
+  .shell{display:grid;grid-template-columns:186px minmax(0,1fr);gap:56px;align-items:start}
+}
+nav.toc{display:none}
+@media (min-width:1000px){
+  nav.toc{
+    display:block;position:sticky;top:28px;
+    padding-top:52px;
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:11.5px;line-height:1.5;letter-spacing:.02em;
+  }
+  nav.toc ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+  nav.toc a{
+    display:flex;gap:9px;
+    padding:7px 0;
+    color:var(--muted);text-decoration:none;
+    border-top:1px solid var(--line);
+  }
+  nav.toc li:last-child a{border-bottom:1px solid var(--line)}
+  nav.toc a:hover,nav.toc a:focus-visible{color:var(--accent)}
+  nav.toc .n{color:var(--accent);font-weight:600;flex:none}
+}
+
+main{min-width:0}
+
+/* ---------- sections ---------- */
+section{padding-top:64px}
+.sec-head{
+  border-top:3px solid var(--line-heavy);
+  padding-top:14px;
+  margin-bottom:26px;
+}
+.sec-head .tag{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent);font-weight:600;
+}
+.sec-head h2{
+  font-family:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
+  font-weight:700;
+  font-size:clamp(1.75rem,3.6vw,2.5rem);
+  line-height:1.06;letter-spacing:-.022em;
+  margin:.3em 0 .3em;text-wrap:balance;
+  max-width:22ch;
+}
+.sec-head p{margin:0;color:var(--ink-2);max-width:66ch;font-size:1.02rem}
+
+h3{
+  font-family:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
+  font-weight:700;font-size:1.2rem;letter-spacing:-.012em;
+  margin:38px 0 12px;text-wrap:balance;
+}
+h4{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-weight:600;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin:30px 0 10px;
+}
+p{max-width:68ch;margin:0 0 1em}
+a{color:var(--accent)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+strong{font-weight:600}
+.lead{font-size:1.1rem;color:var(--ink-2)}
+
+ul.body-list{max-width:68ch;padding-left:0;list-style:none;margin:0 0 1.2em;display:flex;flex-direction:column;gap:.55em}
+ul.body-list li{position:relative;padding-left:1.1em}
+ul.body-list li::before{
+  content:"";position:absolute;left:0;top:.62em;
+  width:6px;height:6px;background:var(--accent);
+}
+
+/* ---------- stat band (nutrition-label breakout) ---------- */
+.band{
+  border-top:3px solid var(--line-heavy);
+  border-bottom:3px solid var(--line-heavy);
+  margin:34px 0;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+}
+.band .cell{
+  padding:20px 20px 22px;
+  border-right:1px solid var(--line);
+}
+.band .cell:last-child{border-right:none}
+.band .num{
+  font-family:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
+  font-weight:800;
+  font-size:clamp(1.7rem,4vw,2.3rem);
+  line-height:1;letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums;
+  color:var(--accent);
+  display:block;
+}
+.band .num.warn{color:var(--hot)}
+.band .cap{
+  font-size:14px;line-height:1.4;color:var(--ink-2);
+  margin-top:9px;display:block;
+}
+.band .src{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin-top:7px;display:block;
+}
+
+/* ---------- tables ---------- */
+.tbl-scroll{overflow-x:auto;margin:22px 0 28px;border-bottom:1px solid var(--line)}
+table{
+  border-collapse:collapse;width:100%;min-width:560px;
+  font-size:14.5px;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-variant-numeric:tabular-nums;
+}
+caption{
+  text-align:left;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);padding-bottom:10px;
+}
+th{
+  text-align:left;font-weight:600;font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted);
+  border-bottom:2px solid var(--line-heavy);
+  padding:9px 14px 9px 0;vertical-align:bottom;
+}
+td{
+  padding:11px 14px 11px 0;
+  border-bottom:1px solid var(--line);
+  vertical-align:top;color:var(--ink-2);
+  line-height:1.45;
+}
+td:first-child{color:var(--ink);font-weight:500}
+tr:last-child td{border-bottom:none}
+
+/* ---------- cards ---------- */
+.grid{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);margin:26px 0}
+@media (min-width:720px){.grid.two{grid-template-columns:1fr 1fr}}
+@media (min-width:820px){.grid.three{grid-template-columns:repeat(3,1fr)}}
+.card{background:var(--surface);padding:22px 22px 24px}
+.card .kicker{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--accent);font-weight:600;
+}
+.card h5{
+  font-family:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
+  font-weight:700;font-size:1.08rem;letter-spacing:-.01em;
+  margin:.42em 0 .5em;line-height:1.2;
+}
+.card p{font-size:15px;margin:0 0 .7em;max-width:none;color:var(--ink-2)}
+.card p:last-child{margin-bottom:0}
+.card dl{margin:0;font-size:14px}
+.card dt{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  margin-top:12px;
+}
+.card dd{margin:2px 0 0;color:var(--ink-2);line-height:1.45}
+
+/* ---------- phase strip ---------- */
+.phase{
+  display:grid;gap:1px;background:var(--line);
+  border:1px solid var(--line);margin:26px 0;
+}
+@media (min-width:760px){.phase{grid-template-columns:repeat(3,1fr)}}
+.phase .p{background:var(--surface);padding:20px}
+.phase .p .when{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);
+}
+.phase .p .what{
+  font-family:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
+  font-weight:700;font-size:1.02rem;margin:.35em 0 .55em;display:block;
+}
+.phase .p ul{margin:0;padding-left:1.05em;font-size:14.5px;color:var(--ink-2);line-height:1.5}
+.phase .p li{margin-bottom:.35em}
+
+/* ---------- script blocks ---------- */
+.script{
+  border:1px solid var(--line);
+  border-top:3px solid var(--accent);
+  background:var(--surface);
+  padding:22px 22px 24px;
+  margin:22px 0;
+}
+.script .sh{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:baseline;margin-bottom:14px}
+.script .sh .t{
+  font-family:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
+  font-weight:700;font-size:1.12rem;letter-spacing:-.01em;
+}
+.script .sh .chip{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  border:1px solid var(--line);padding:3px 8px;color:var(--muted);
+}
+.beat{
+  display:grid;grid-template-columns:64px minmax(0,1fr);
+  gap:0 16px;
+  border-top:1px solid var(--line);
+  padding:11px 0;
+  font-size:15px;
+}
+.beat:first-of-type{border-top:none}
+.beat .tc{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;color:var(--accent);font-weight:600;
+  padding-top:.28em;font-variant-numeric:tabular-nums;
+}
+.beat .ln{color:var(--ink-2);line-height:1.5}
+.beat .ln q{color:var(--ink);font-style:italic;quotes:"“" "”"}
+.script .note{
+  margin-top:14px;padding-top:13px;border-top:1px solid var(--line);
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:12px;line-height:1.5;color:var(--muted);
+}
+.script .note b{color:var(--ink-2);font-weight:600}
+
+/* ---------- callouts ---------- */
+.callout{
+  border-left:4px solid var(--accent);
+  background:var(--accent-soft);
+  padding:18px 22px;margin:26px 0;
+  font-size:16px;line-height:1.55;
+}
+.callout.warn{border-left-color:var(--amber);background:var(--amber-soft)}
+.callout.stop{border-left-color:var(--hot);background:var(--hot-soft)}
+.callout .lbl{
+  display:block;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  font-weight:600;margin-bottom:7px;color:var(--accent);
+}
+.callout.warn .lbl{color:var(--amber)}
+.callout.stop .lbl{color:var(--hot)}
+.callout p{margin:0;max-width:64ch}
+.callout p + p{margin-top:.7em}
+
+/* ---------- verdict ---------- */
+.verdict{
+  border:3px solid var(--line-heavy);
+  padding:30px 28px;
+  margin:36px 0 8px;
+  background:var(--surface);
+}
+.verdict .lbl{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--hot);font-weight:600;
+}
+.verdict .big{
+  font-family:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
+  font-weight:700;
+  font-size:clamp(1.35rem,3.2vw,2rem);
+  line-height:1.16;letter-spacing:-.022em;
+  margin:.4em 0 .5em;text-wrap:balance;max-width:26ch;
+}
+.verdict .big span{color:var(--accent)}
+.verdict p{margin:0;color:var(--ink-2)}
+
+/* ---------- footnotes ---------- */
+.sources{margin-top:76px;border-top:3px solid var(--line-heavy);padding-top:20px}
+.sources h3{margin-top:0}
+.sources ol{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:12.5px;line-height:1.55;color:var(--muted);
+  padding-left:1.4em;margin:0;
+  display:flex;flex-direction:column;gap:.5em;
+}
+.sources a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--line)}
+.sources a:hover{border-bottom-color:var(--accent)}
+sup.fn{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:9.5px;color:var(--accent);font-weight:600;
+  vertical-align:super;line-height:0;margin-left:1px;
+}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
+html{scroll-behavior:smooth}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">Rakip ve reklam araştırması · Eylül 2026 · TR → Global</div>
+  <h1>Fıstık Stratejisi</h1>
+  <p class="standfirst">Fotoğraftan kalori saymak artık ürün değil, giriş bileti. Boşluk şurada: <em>Türk mutfağını gerçekten tanıyan, protein önceliği olan, GLP-1 kullanıcısına hizmet eden ve iptal butonu çalışan</em> bir beslenme koçu.</p>
+  <div class="meta-row">
+    <span>Kategori: AI beslenme takibi</span>
+    <span>Pazar: Önce Türkiye, sonra global</span>
+    <span>5 çıktı</span>
+  </div>
+</header>
+
+<div class="notice">
+  <span class="lbl">Yöntem notu — Apify kullanılamadı</span>
+  Verdiğiniz Apify anahtarı çalıştırılamadı: <code>api.apify.com</code> bu oturumun ağ politikası tarafından engellendi (proxy 403), hem konteynerden hem de sayfa çekme katmanından. Erişilebilir bir Apify konektörü de yok. Bu bir anahtar sorunu değil, izin sorunu. <strong>Anahtarı yine de iptal edip yenileyin</strong> — düz metin olarak paylaşıldı. Aşağıdaki bulgular Meta reklam kütüphanesi analizleri, mağaza yorum çalışmaları, paywall vaka incelemeleri ve pazar raporlarından derlendi; her sayı kaynağına bağlı.
+</div>
+
+<div class="shell">
+
+  <nav class="toc" aria-label="Bölümler">
+    <ol>
+      <li><a href="#zemin"><span class="n">◆</span> Zemin</a></li>
+      <li><a href="#ozellikler"><span class="n">1</span> Özellikler</a></li>
+      <li><a href="#kitle"><span class="n">2</span> Müşteri kitlesi</a></li>
+      <li><a href="#icerik"><span class="n">3</span> Tutan içerikler</a></li>
+      <li><a href="#funnel"><span class="n">4</span> Satış funnelları</a></li>
+      <li><a href="#reklam"><span class="n">5</span> Reklam kreatifleri</a></li>
+      <li><a href="#risk"><span class="n">◆</span> Risk &amp; 90 gün</a></li>
+      <li><a href="#kaynaklar"><span class="n">◆</span> Kaynaklar</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+  <!-- ============ ZEMIN ============ -->
+  <section id="zemin">
+    <div class="sec-head">
+      <div class="tag">Zemin</div>
+      <h2>Kategori kanıtlandı, sonra da doydu</h2>
+      <p>Karar vermeden önce bilinmesi gereken beş rakam. İlk ikisi neden bu kategoriye girileceğini, son üçü neden <em>genel bir kalori sayacı</em> yapılmayacağını söylüyor.</p>
+    </div>
+
+    <div class="band">
+      <div class="cell">
+        <span class="num">$40M</span>
+        <span class="cap">Cal AI'ın yıllık geliri — sıfırdan ~2 yılda, dış yatırımsız. Mart 2026'da MyFitnessPal satın aldı.</span>
+        <span class="src">Latka · TechCrunch</span>
+      </div>
+      <div class="cell">
+        <span class="num">15M+</span>
+        <span class="cap">Cal AI indirme sayısı. Kategori talebi tartışmasız var.</span>
+        <span class="src">TechCrunch</span>
+      </div>
+      <div class="cell">
+        <span class="num warn">%3–10</span>
+        <span class="cap">Beslenme uygulamalarının 30. gün tutunma oranı. Asıl problem edinme değil, elde tutma.</span>
+        <span class="src">Sahha · RetentionCheck</span>
+      </div>
+      <div class="cell">
+        <span class="num warn">%66</span>
+        <span class="cap">Cal AI'ın Şubat 2026 yorumlarında tek yıldız oranı — iptal butonu çalışmadığı için.</span>
+        <span class="src">Nutrola yorum analizi</span>
+      </div>
+      <div class="cell">
+        <span class="num warn">%97</span>
+        <span class="cap">Yazio geri bildirimlerinde doğruluk şikayeti oranı. Aynı oran MyFitnessPal'da fiyat şikayeti.</span>
+        <span class="src">Kimola · Nutrola</span>
+      </div>
+    </div>
+
+    <h3>Ne değişti</h3>
+    <p>2024–25'te fotoğraftan yemek tanıma bir <strong>özellikti</strong>; onu ilk yapan pazarı aldı. 2026 ortasında aynı şey <strong>masaya giriş bedeli</strong>. Sektör analizleri açık: fotoğraf tanıma artık standart, öne geçen uygulamalar o sayıları <em>sürekli ve kişisel rehberliğe</em> çevirenler.<sup class="fn">7</sup> Üstelik tüm uygulamalar %10–25 kalori hata payı bandında sıkışmış<sup class="fn">2</sup> — yani "daha doğru tanıyorum" iddiası üzerine ürün kurulamaz, çünkü kullanıcı farkı hissetmiyor.</p>
+
+    <p>Buna karşılık üç tane gerçek, ölçülmüş açık duruyor:</p>
+
+    <div class="grid three">
+      <div class="card">
+        <div class="kicker">Açık 01 — Tutunma</div>
+        <h5>Kayıt yorgunluğu kategoriyi öldürüyor</h5>
+        <p>Manuel kayıt günde 15–20 dakika alıyor ve yorgunluk 8–12. haftada başlıyor. Ama AI fotoğrafla loglayanlar — öğün başına 8 saniye — 30. günde <strong>2,5 kat</strong> daha iyi tutunuyor.<sup class="fn">6</sup></p>
+        <p>Sürtünmeyi düşüren her şey doğrudan tutunma. Ürünün asıl işi bu.</p>
+      </div>
+      <div class="card">
+        <div class="kicker">Açık 02 — Güven</div>
+        <h5>Liderler kendi kullanıcılarını yakıyor</h5>
+        <p>Cal AI'ın çalışmayan iptal butonu, MyFitnessPal'ın fiyat öfkesi, Yazio'nun veri hataları. Kategorinin sorunu işlev değil, <strong>para alma biçimi</strong>.<sup class="fn">5</sup></p>
+        <p>Dürüst faturalama burada pazarlama malzemesi. Başka hiçbir kategoride bu kadar ucuza farklılaşamazsın.</p>
+      </div>
+      <div class="card">
+        <div class="kicker">Açık 03 — Yerellik</div>
+        <h5>Türk mutfağı hiçbir yerde düzgün değil</h5>
+        <p>Global uygulamalarda Türk yemeği kayıtları hatalı ve çoklu; aynı yemek farklı kalorilerle üç kez girili. Türk mutfağına özel eğitilmiş modeller <strong>%35 daha isabetli</strong> tahmin iddia ediyor.<sup class="fn">9</sup></p>
+        <p>TurkishFoods-25 gibi 11.461 görsellik açık veri setleri başlangıç noktası olarak hazır.</p>
+      </div>
+    </div>
+
+    <div class="verdict">
+      <div class="lbl">Tavsiye</div>
+      <div class="big">Kalori sayacı yapma. <span>İğnedeki insanın kas kaybetmesini engelleyen Türkçe koçu</span> yap.</div>
+      <p>Fotoğraf tanıma içeride olacak ama vitrin o değil. Konum: GLP-1 (Ozempic / Mounjaro / Wegovy) kullanan ve kilo verirken kas kaybeden insan. Kaybedilen kilonun <strong>%40'a kadarı kas</strong> olabiliyor<sup class="fn">8</sup> — bu, kullanıcının bildiği ve korktuğu somut bir acı. Türk mutfağı veritabanı ise bu kitleyi TR'de kimsenin alamayacağı biçimde kilitleyen ikinci katman.</p>
+    </div>
+  </section>
+
+  <!-- ============ 1 OZELLIKLER ============ -->
+  <section id="ozellikler">
+    <div class="sec-head">
+      <div class="tag">Çıktı 1</div>
+      <h2>Uygulamaya ekleyeceğin özellikler</h2>
+      <p>Üç dalga halinde. Her özellik yukarıdaki üç açıktan birine bağlı — bağlı olmayan hiçbir şey listede yok.</p>
+    </div>
+
+    <div class="phase">
+      <div class="p">
+        <span class="when">Dalga 1 · Hafta 0–8 · MVP</span>
+        <span class="what">Tek işi kusursuz yap</span>
+        <ul>
+          <li><b>Türk mutfağı foto tanıma:</b> tencere yemeği, çorba, pilav üstü, kahvaltı tabağı, pide/lahmacun. Porsiyon referansı gram değil <em>kepçe, kaşık, çay bardağı, tabak</em>.</li>
+          <li><b>Protein önce arayüz:</b> ana ekranda ilk okunan sayı protein, kalori ikinci sırada.</li>
+          <li><b>Türkçe sesli kayıt:</b> "öğlen bir kase mercimek çorbası ve iki dilim ekmek."</li>
+          <li><b>TR market barkodu:</b> Migros, BİM, A101, ŞOK özel markaları dahil.</li>
+          <li><b>Affeden takip:</b> streak yok. 7 günlük hareketli ortalama; kaçırılan gün ortalamayı bozmaz.</li>
+          <li><b>Pasif senkron:</b> Apple Health / Google Fit — adım, kilo, uyku kullanıcı yazmadan gelsin.</li>
+          <li><b>Şeffaf iptal:</b> ayarlarda tek dokunuş + deneme bitmeden 48 saat önce bildirim.</li>
+        </ul>
+      </div>
+      <div class="p">
+        <span class="when">Dalga 2 · Ay 2–4 · Farklılaşma</span>
+        <span class="what">Hendeği kaz</span>
+        <ul>
+          <li><b>GLP-1 modülü:</b> doz takibi, iğne bölgesi rotasyonu, yan etki günlüğü, iştah skoru.</li>
+          <li><b>Kas koruma paneli:</b> "bugün 62g protein aldın, hedefin 110g — akşama şu üç seçenek."</li>
+          <li><b>Türkçe AI koç:</b> haftalık rapor + o hafta için tek somut düzeltme. Liste değil, tek cümle.</li>
+          <li><b>Tarif → makro:</b> annenin yemeğinin tarifi girilince porsiyon makrosu çıkıyor.</li>
+          <li><b>Bütçeye duyarlı haftalık menü</b> ve market listesi — TR fiyatlarıyla.</li>
+        </ul>
+      </div>
+      <div class="p">
+        <span class="when">Dalga 3 · Ay 4–9 · Genişleme</span>
+        <span class="what">Geliri çeşitlendir</span>
+        <ul>
+          <li><b>Diyetisyen pazar yeri:</b> TR'de diyetisyen kültürü güçlü; komisyonlu eşleştirme abonelik dışı ikinci gelir.</li>
+          <li><b>Eş / aile modu:</b> ortak alışveriş listesi, aynı mutfaktan iki hedef.</li>
+          <li><b>Kurumsal sağlık paketi:</b> şirket çalışan sağlığı bütçelerine satış.</li>
+          <li><b>Global sıçrama:</b> aynı motoru başka "ihmal edilmiş" mutfaklara — Arap, Fars, Hint.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout stop">
+      <span class="lbl">Yapmayacaklar listesi</span>
+      <p>Sosyal akış, arkadaş ekleme, egzersiz video kütüphanesi, giyilebilir cihaz, meydan okuma/rozet sistemi. Bunların hepsi kategoride denendi ve tutunmayı artırmadı; sadece geliştirme süresi yedi. Tek istisna: kilo/adım verisini <em>okumak</em>, üretmek değil.</p>
+    </div>
+  </section>
+
+  <!-- ============ 2 KITLE ============ -->
+  <section id="kitle">
+    <div class="sec-head">
+      <div class="tag">Çıktı 2</div>
+      <h2>Müşteri kitlesi</h2>
+      <p>Dört segment, iki fazda. TR fazında P1 ve P2 parayı getiriyor, P3 organik büyümeyi taşıyor. P4 altıncı aydan sonra devreye giriyor ve asıl kâr orada.</p>
+    </div>
+
+    <div class="grid two">
+      <div class="card">
+        <div class="kicker">P1 · Birincil · En yüksek LTV</div>
+        <h5>"İğnedeki Ayşe"</h5>
+        <p>32–48 yaş kadın, büyükşehir, GLP-1 kullanıyor ya da başlamak üzere. iOS ağırlıklı, orta-üst gelir.</p>
+        <dl>
+          <dt>Acı</dt><dd>İştahı yok ama ne yemesi gerektiğini bilmiyor. Kas ve saç kaybından korkuyor. Doktoru ayda bir görüyor, arada yalnız.</dd>
+          <dt>Neden öder</dt><dd>Zaten aylık ilaç parası ödüyor. Uygulama ücreti onun yanında yuvarlama hatası.</dd>
+          <dt>Nerede</dt><dd>Instagram Reels, kapalı Facebook/WhatsApp GLP-1 grupları, YouTube deneyim videoları.</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="kicker">P2 · Birincil · Yüksek tutunma</div>
+        <h5>"Kas koruyan Emre"</h5>
+        <p>24–38 yaş erkek, haftada 3–5 gün antrenman, Android ağırlıklı, fiyata duyarlı ama yıllık plana yatar.</p>
+        <dl>
+          <dt>Acı</dt><dd>Protein hesabını zaten yapıyor; ama uygulamada "annemin karnıyarığı" yok, her öğünde elle giriyor ve bıkıyor.</dd>
+          <dt>Neden öder</dt><dd>Ölçmeyi seven segment. Doğru veri karşılığında ödemeye alışkın.</dd>
+          <dt>Nerede</dt><dd>TikTok fitness, YouTube antrenman kanalları, Reddit/Ekşi spor başlıkları.</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="kicker">P3 · Hacim · Düşük dönüşüm</div>
+        <h5>"Bütçesi olmayan Zeynep"</h5>
+        <p>22–32 yaş, diyetisyene aylık ücret veremiyor. Freemium'un yakıtı ve organik erişimin motoru.</p>
+        <dl>
+          <dt>Rolü</dt><dd>Para değil <em>dağıtım</em> getiriyor. Ekran görüntüsü paylaşır, arkadaşına gönderir, yorum yazar.</dd>
+          <dt>Nasıl davran</dt><dd>Ücretsiz katmanı cömert tut — günde 3 fotoğraf hakkı. Onu paywall'a sıkıştırma, sesini kullan.</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="kicker">P4 · Faz 2 · Asıl kâr</div>
+        <h5>ABD GLP-1 kullanıcısı</h5>
+        <p>Aynı ürün, İngilizce arayüz, ABD gıda veritabanı. TR'de kanıtlanmış funnel doğrudan taşınır.</p>
+        <dl>
+          <dt>Neden bekle</dt><dd>ABD'de kreatif test etmek pahalı. TR'de aynı hook'u onda bir maliyetle test edip kazananı oraya taşımak sermayeyi korur.</dd>
+          <dt>Ne zaman</dt><dd>TR'de 30. gün tutunma %20'yi geçtiğinde. Öncesinde değil.</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="tbl-scroll">
+      <table>
+        <caption>Segment ekonomisi — TR fazı varsayımları</caption>
+        <thead>
+          <tr><th>Segment</th><th>Fiyat noktası</th><th>Beklenen ödemeye dönüşüm</th><th>Öncelik</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>P1 · GLP-1</td><td>Yıllık, üst fiyat</td><td>Kategori ortalamasının üstü — niyet çok yüksek</td><td>Bütçenin %60'ı</td></tr>
+          <tr><td>P2 · Kas koruma</td><td>Yıllık, orta fiyat</td><td>Kategori ortalaması civarı</td><td>Bütçenin %30'u</td></tr>
+          <tr><td>P3 · Bütçesiz</td><td>Ücretsiz katman</td><td>Çok düşük — hedef değil</td><td>Bütçenin %10'u, organik</td></tr>
+          <tr><td>P4 · ABD GLP-1</td><td>USD, TR'nin 8–10 katı</td><td>TR'ye yakın oran, çok yüksek gelir</td><td>Faz 2</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <span class="lbl">TR gerçeği — bunu baştan kabul et</span>
+      <p>Türkiye'de uygulama içi ödeme dönüşümü tipik olarak %1–5 bandında ve ARPU düşük.<sup class="fn">11</sup> KDV fiyata dahil gösterilmek zorunda. Türkiye'yi <strong>kâr merkezi değil, kreatif laboratuvarı</strong> olarak kur: burada ucuz test et, kazanan hook'u ve funnel'ı ABD'ye taşı. Bu zaten seçtiğin "önce TR, sonra global" rotasının tek doğru okunuşu.</p>
+    </div>
+  </section>
+
+  <!-- ============ 3 ICERIK ============ -->
+  <section id="icerik">
+    <div class="sec-head">
+      <div class="tag">Çıktı 3</div>
+      <h2>Tutan içerikler</h2>
+      <p>Cal AI'ın büyümesi reklam bütçesiyle başlamadı; yüzlerce içerik üreticisine tek tek mesaj atarak başladı ve kazanan kreatif bulunduktan <em>sonra</em> aylık $1M reklam harcamasına geçildi.<sup class="fn">4</sup> Sıra bu: önce format bul, sonra para dök.</p>
+    </div>
+
+    <div class="band">
+      <div class="cell">
+        <span class="num">%78</span>
+        <span class="cap">Hayatta kalan kreatiflerin video olma oranı — ve çoğu 30 saniyenin altında.</span>
+        <span class="src">Brandsearch · 500+ kreatif</span>
+      </div>
+      <div class="cell">
+        <span class="num">%62</span>
+        <span class="cap">Yapılandırılmış hook testinin fitness kampanyalarında sağladığı CTR artışı.</span>
+        <span class="src">Benly · adlibrary</span>
+      </div>
+      <div class="cell">
+        <span class="num">10+</span>
+        <span class="cap">Haftada test edilmesi gereken yeni hook sayısı. Cal AI'ın ritmi buydu.</span>
+        <span class="src">Stormy</span>
+      </div>
+    </div>
+
+    <h3>TR için sekiz format</h3>
+    <p>Sıralama, ilk 8 hafta içinde test edilme önceliğine göre. İlk üçü organik erişim için, sonraki üçü dönüşüm için, son ikisi konumlandırma için.</p>
+
+    <div class="grid two">
+      <div class="card">
+        <div class="kicker">Format 01 · Erişim</div>
+        <h5>"Tahmin et"</h5>
+        <p>Bir tabak gösterilir, izleyiciden kalori tahmini istenir, sonra uygulamayla ölçülür. Yorum motoru — insanlar cevabı yazmak için duramaz.</p>
+        <p><strong>Neden tutar:</strong> algoritma yorumu ödüllendirir ve her yorum yeni bir dağıtım turu açar. Ürün gösterimi tamamen doğal.</p>
+      </div>
+      <div class="card">
+        <div class="kicker">Format 02 · Erişim</div>
+        <h5>Kalori şoku, Türk mutfağı</h5>
+        <p>"Bir lahmacun mu, bir tabak mantı mı?" — yan yana karşılaştırma. Sadece Türk yemekleriyle.</p>
+        <p><strong>Neden tutar:</strong> global rakiplerin üretemeyeceği içerik. Aynı anda hem viral hem de ürünün farkını kanıtlıyor.</p>
+      </div>
+      <div class="card">
+        <div class="kicker">Format 03 · Erişim</div>
+        <h5>"Annemin yemeği"</h5>
+        <p>Ev yapımı bir tencere yemeğinin kalorisini bulma denemesi: önce global uygulamada aranır, bulunamaz; sonra fotoğraf çekilir, çıkar.</p>
+        <p><strong>Neden tutar:</strong> TR'ye özgü, duygusal ve rakip zayıflığını göstermeden anlatıyor.</p>
+      </div>
+      <div class="card">
+        <div class="kicker">Format 04 · Dönüşüm</div>
+        <h5>GLP-1 günlüğü</h5>
+        <p>Gerçek kullanıcı, iğnenin 3. ayında, kas kaybını ve protein hedefini anlatıyor. Seri halinde, haftalık.</p>
+        <p><strong>Neden tutar:</strong> en yüksek satın alma niyetli izleyici. Az izlenme, çok dönüşüm — organikte erişime değil, kaliteye bak.</p>
+      </div>
+      <div class="card">
+        <div class="kicker">Format 05 · Dönüşüm</div>
+        <h5>Ham UGC</h5>
+        <p>Telefonla, tek çekimde, tökezleyerek konuşan gerçek kullanıcı. Senaryo var ama ezberlenmemiş.</p>
+        <p><strong>Neden tutar:</strong> veri net — kendini düzelten, biraz dağınık konuşan gerçek müşteriler cilalı UGC senaryolarından daha iyi performans veriyor.<sup class="fn">12</sup></p>
+      </div>
+      <div class="card">
+        <div class="kicker">Format 06 · Dönüşüm</div>
+        <h5>8 saniyelik ekran kaydı</h5>
+        <p>Sadece ürün: tabak → fotoğraf → sonuç. Konuşma yok, altyazı var.</p>
+        <p><strong>Neden tutar:</strong> AI fotoğraf logunun asıl vaadi hız. Hızı anlatmak yerine göstermek gerekiyor.</p>
+      </div>
+      <div class="card">
+        <div class="kicker">Format 07 · Otorite</div>
+        <h5>Diyetisyen reaksiyonu</h5>
+        <p>Gerçek bir diyetisyen uygulamayı canlı deniyor, hatalarını da söylüyor.</p>
+        <p><strong>Neden tutar:</strong> kategorinin doğruluk krizine doğrudan cevap. Eleştiriyi kesmemek güveni artırıyor.</p>
+      </div>
+      <div class="card">
+        <div class="kicker">Format 08 · Konumlandırma</div>
+        <h5>Şeffaflık içeriği</h5>
+        <p>"İptal butonumuz burada" — üç saniyede iptal ekranını gösteren video. Rakibe isim vermeden.</p>
+        <p><strong>Neden tutar:</strong> kategorinin en büyük öfkesi faturalandırma. Rakibin adını anma; sadece kendi iptalini göster, izleyici bağlantıyı kendi kurar.</p>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <span class="lbl">Uyum uyarısı</span>
+      <p>Meta 2026'da dramatik ya da tıbbi düzeyde sonuç ima eden <strong>öncesi/sonrası vücut görsellerini</strong> kısıtlamaya devam ediyor.<sup class="fn">12</sup> Dönüşümü vücut karşılaştırmasıyla değil, yaşam tarzı ve duygusal yolculuk çerçevesiyle anlat. Aynı kısıt GLP-1 içeriği için daha da sıkı: tıbbi tavsiye verme, "bilgilendirme ve takip aracı" çerçevesinde kal.</p>
+    </div>
+
+    <h4>Yayın ritmi</h4>
+    <ul class="body-list">
+      <li>Haftada <strong>15–20 organik video</strong>, en az 3 farklı formattan. Tek format üstüne yığılma.</li>
+      <li>Haftada <strong>10+ yeni hook</strong> testi — ilk 2 saniye değişir, gövde sabit kalır.</li>
+      <li>Kişisel hesap değil, <strong>3–5 tematik hesap</strong> aç: biri GLP-1, biri kas koruma, biri Türk mutfağı kalorileri. Algoritma odaklı hesabı ödüllendiriyor.</li>
+      <li>Kazanan organik videoyu <strong>olduğu gibi reklama al</strong>. Yeniden çekme.</li>
+    </ul>
+  </section>
+
+  <!-- ============ 4 FUNNEL ============ -->
+  <section id="funnel">
+    <div class="sec-head">
+      <div class="tag">Çıktı 4</div>
+      <h2>Satış funnelları</h2>
+      <p>İki funnel, iki bütçe senaryosu için. Bütçe tercihi belirtmediğiniz için ikisini de kurdum — A düşük bütçeyle bugün başlatılabilir, B kazanan kreatif bulunduktan sonra devreye girer.</p>
+    </div>
+
+    <div class="band">
+      <div class="cell">
+        <span class="num">%13</span>
+        <span class="cap">Kullanıcıların paywall'a ulaşma oranı. Kayıp çoğunlukla paywall'da değil, onboarding içinde.</span>
+        <span class="src">FunnelFox</span>
+      </div>
+      <div class="cell">
+        <span class="num">%23</span>
+        <span class="cap">Paywall'a ulaşanların satın alma oranı. Toplam oturumların yalnızca ~%3'ü satışla bitiyor.</span>
+        <span class="src">FunnelFox</span>
+      </div>
+      <div class="cell">
+        <span class="num">%10+</span>
+        <span class="cap">Noom'un quiz tamamlayanları ödemeye çevirme oranı — abonelik uygulamalarında medyan %2,7.</span>
+        <span class="src">RevenueCat</span>
+      </div>
+      <div class="cell">
+        <span class="num">61</span>
+        <span class="cap">Cal AI'ın 10 ayda yürüttüğü paywall deneyi sayısı; aylık geliri 3 kattan fazla artırdı.</span>
+        <span class="src">Superwall</span>
+      </div>
+    </div>
+
+    <h3>Funnel A — Organik → App Store</h3>
+    <p class="lead">Düşük bütçe senaryosu. Ayda 1.000 doların altında yürür; maliyeti içerik üretim emeği.</p>
+
+    <div class="tbl-scroll">
+      <table>
+        <caption>Funnel A · Adım adım</caption>
+        <thead><tr><th>Adım</th><th>Ne oluyor</th><th>Kritik detay</th></tr></thead>
+        <tbody>
+          <tr><td>1 · Keşif</td><td>TikTok / Reels organik video</td><td>Kazanan hook bulunana kadar günde 3 video</td></tr>
+          <tr><td>2 · Tıklama</td><td>Profil → mağaza linki</td><td>Mağaza görselinin ilk karesi videodaki sonuç ekranıyla aynı olsun</td></tr>
+          <tr><td>3 · Onboarding</td><td>22–28 ekranlık kişiselleştirme</td><td>Uzun onboarding <em>dönüşümü artırıyor</em>; Cal AI 32 ekran kullandı<sup class="fn">3</sup></td></tr>
+          <tr><td>4 · Yatırım</td><td>"Planın hazırlanıyor" animasyonu</td><td>Bekleme, emek algısı yaratıyor — atlanacak ekran değil</td></tr>
+          <tr><td>5 · Plan</td><td>Kişisel protein + kalori hedefi</td><td>GLP-1 seçtiyse kas koruma uyarısı burada çıkar</td></tr>
+          <tr><td>6 · İzinler</td><td>Bildirim izni, değerlendirme isteği</td><td>Paywall'dan <em>önce</em> — kullanıcı henüz para konuşulmadığı için cömert</td></tr>
+          <tr><td>7 · Paywall</td><td>3 gün ücretsiz, sonra yıllık</td><td>CTA "₺0,00 ile başla". Cal AI'ın kazanan metni buydu<sup class="fn">3</sup></td></tr>
+          <tr><td>8 · Güven</td><td>Deneme bitmeden 48 saat önce bildirim</td><td>Kategorinin en büyük şikayetini burada kapatıyorsun</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Funnel B — Ücretli reklam → web quiz → web ödeme</h3>
+    <p class="lead">Orta bütçe senaryosu, aylık $3–10k. Kazanan kreatif elindeyken açılır, önce değil.</p>
+
+    <div class="tbl-scroll">
+      <table>
+        <caption>Funnel B · Adım adım</caption>
+        <thead><tr><th>Adım</th><th>Ne oluyor</th><th>Kritik detay</th></tr></thead>
+        <tbody>
+          <tr><td>1 · Reklam</td><td>Meta / TikTok video</td><td>Organikte kazanmış kreatif; yeni üretim değil</td></tr>
+          <tr><td>2 · Quiz</td><td>7 soruluk kişiselleştirme</td><td>3–7 soru bandı en yüksek tamamlama veriyor<sup class="fn">10</sup></td></tr>
+          <tr><td>3 · Sonuç</td><td>Kişisel plan + kas kaybı uyarısı</td><td>Sayı ver: "hedefin günde 110g protein"</td></tr>
+          <tr><td>4 · Ödeme</td><td>Web checkout</td><td>Mağaza komisyonu yok, e-posta yakalanıyor, remarketing açılıyor</td></tr>
+          <tr><td>5 · Aktivasyon</td><td>Uygulama indirme + otomatik giriş</td><td>Ödeme ile uygulama arasında şifre sorma</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <span class="lbl">Neden web ödeme</span>
+      <p>Mağaza komisyonundan kaçmak sadece bir avantaj. Asıl kazanç e-posta: TR'de kart dönüşümü düşük olduğu için terk edenlere geri dönebilmek funnel'ın kendisinden daha değerli. Uygulamalar genelde iki yolu da paralel çalıştırıp 30–60 günlük LTV verisine göre varsayılanı seçiyor<sup class="fn">10</sup> — sen de öyle yap, baştan karar verme.</p>
+    </div>
+
+    <h4>Deneme süresi ve elde tutma zinciri</h4>
+    <ul class="body-list">
+      <li><strong>Gün 0:</strong> ilk öğün fotoğrafı çekilmeden onboarding bitmesin. Değeri deneme başlamadan göster.</li>
+      <li><strong>Gün 1:</strong> "İlk günün özeti" bildirimi — tek sayı, tek öneri.</li>
+      <li><strong>Gün 2:</strong> kişisel trend grafiği açılır. Burada terk oranı en yüksek, en güçlü kartı buraya koy.</li>
+      <li><strong>Gün 3 (deneme bitmeden 48 saat):</strong> dürüst hatırlatma bildirimi. Bu, iptali artırır ama <em>tek yıldız yorumlarını ve iade taleplerini düşürür</em>. Uzun vadede mağaza sıralaması bundan kazanır.</li>
+      <li><strong>Gün 30 iptalinde:</strong> hemen indirim teklif etme. 60 gün sonra %50 ile geri kazanım kampanyası kur.</li>
+    </ul>
+
+    <div class="callout stop">
+      <span class="lbl">Sınır</span>
+      <p>Zor iptal, gizli fiyat, karanlık desen kullanma. Ticari olarak da yanlış: Cal AI'ın Şubat 2026'da yorumlarının %66'sı tek yıldıza düştü ve bunun tek sebebi çalışmayan bir iptal butonuydu.<sup class="fn">5</sup> Mağaza sıralaması yorum ortalamasına bağlı — kısa vadeli gelir, edinme kanalının kendisini yakıyor.</p>
+    </div>
+  </section>
+
+  <!-- ============ 5 REKLAM ============ -->
+  <section id="reklam">
+    <div class="sec-head">
+      <div class="tag">Çıktı 5</div>
+      <h2>Reklam video ve görselleri</h2>
+      <p>Altı video senaryosu ve dört statik konsept — çekim notlarıyla birlikte, bugün üretilebilecek halde. Hepsi telefonla, stüdyosuz çekilecek şekilde yazıldı.</p>
+    </div>
+
+    <div class="script">
+      <div class="sh"><span class="t">Video 1 — "Tahmin et"</span><span class="chip">15 sn</span><span class="chip">Soğuk kitle</span><span class="chip">Format 01</span></div>
+      <div class="beat"><div class="tc">0–2 sn</div><div class="ln">Elinde dolu bir tabak, doğrudan kameraya: <q>Bu tabak kaç kalori? On kişiden dokuzu yanlış biliyor.</q></div></div>
+      <div class="beat"><div class="tc">2–7 sn</div><div class="ln">Tabağı yavaşça çevirir. Ekranda tahmin rakamları uçuşur: 400 · 900 · 1200.</div></div>
+      <div class="beat"><div class="tc">7–12 sn</div><div class="ln">Telefonu kaldırır, fotoğraf çeker. Sonuç ekranı: <strong>742 kcal · 38g protein</strong>. Yüzünde şaşkınlık.</div></div>
+      <div class="beat"><div class="tc">12–15 sn</div><div class="ln"><q>Türk yemeğini gerçekten tanıyan tek uygulama. Linki profilde.</q></div></div>
+      <div class="note"><b>Çekim:</b> tek çekim, mutfak tezgahı, pencere ışığı, telefon elde. <b>Kurgu:</b> tahmin rakamları CapCut metin animasyonu. <b>Test edilecek hook varyantları:</b> "Bu tabağı yanlış sayıyorsun" · "Diyetisyenim bile şaşırdı" · "Tahmin et, altına yaz."</div>
+    </div>
+
+    <div class="script">
+      <div class="sh"><span class="t">Video 2 — "İğnenin üçüncü ayı"</span><span class="chip">25 sn</span><span class="chip">P1 · GLP-1</span><span class="chip">En yüksek niyet</span></div>
+      <div class="beat"><div class="tc">0–3 sn</div><div class="ln">Sakin, yakın plan, oturuyor: <q>Üç ayda 14 kilo verdim. Ama dördü kastı — bunu kimse söylemiyor.</q></div></div>
+      <div class="beat"><div class="tc">3–10 sn</div><div class="ln"><q>İştahım yok. Günde 40 gram protein alıyordum, hedefim 110'du. Farkı bilmiyordum bile.</q></div></div>
+      <div class="beat"><div class="tc">10–19 sn</div><div class="ln">Telefon ekranı: protein paneli ve o günün açığı. <q>Şimdi her sabah tek şeye bakıyorum: proteini tutturdum mu.</q></div></div>
+      <div class="beat"><div class="tc">19–25 sn</div><div class="ln"><q>Kilo veriyorsan zaten iyisin. Kas kaybediyorsan bunu ölçmen lazım.</q></div></div>
+      <div class="note"><b>Çekim:</b> ev, gündüz, sabit telefon. Kurgu minimum, kesme yok denecek kadar az. <b>Uyum:</b> ilaç adı söylenmez, tıbbi iddia yok, tavsiye verilmez — yalnızca kişisel deneyim ve ölçüm. <b>Not:</b> bu format düşük izlenme + yüksek dönüşüm verir; erişime bakıp kapatma.</div>
+    </div>
+
+    <div class="script">
+      <div class="sh"><span class="t">Video 3 — "Diyetisyen test ediyor"</span><span class="chip">30 sn</span><span class="chip">Otorite</span><span class="chip">Retargeting</span></div>
+      <div class="beat"><div class="tc">0–3 sn</div><div class="ln">Diyetisyen, önlükle: <q>Bu uygulamaları genelde sevmem. Bunu bozmaya çalıştım.</q></div></div>
+      <div class="beat"><div class="tc">3–15 sn</div><div class="ln">Üç zor tabak: karnıyarık, mercimek çorbası, pilav üstü tavuk. Her birinde fotoğraf çekip sonucu okur.</div></div>
+      <div class="beat"><div class="tc">15–24 sn</div><div class="ln"><q>Çorbada yağı düşük tahmin etti. Diğer ikisi benim hesabıma çok yakın.</q></div></div>
+      <div class="beat"><div class="tc">24–30 sn</div><div class="ln"><q>Diyetisyenin yerini tutmaz. Ama arada geçen 29 gün için gerçekten işe yarıyor.</q></div></div>
+      <div class="note"><b>Kritik:</b> hatayı kesme. Eleştirinin kalması güvenilirliği artırıyor ve kategorinin doğruluk şikayetine dürüst cevap veriyor. <b>Çekim:</b> klinik ya da mutfak, sabit tripod, iki kamera açısı iyi olur ama şart değil.</div>
+    </div>
+
+    <div class="script">
+      <div class="sh"><span class="t">Video 4 — "Annemin yemeği"</span><span class="chip">20 sn</span><span class="chip">TR'ye özgü</span><span class="chip">Duygusal</span></div>
+      <div class="beat"><div class="tc">0–3 sn</div><div class="ln">Tencerenin kapağı açılır: <q>Annemin karnıyarığını hiçbir uygulamada bulamıyorum.</q></div></div>
+      <div class="beat"><div class="tc">3–11 sn</div><div class="ln">Global bir uygulamada arama: sonuç yok, ya da alakasız üç kayıt. Sinirli yüz ifadesi.</div></div>
+      <div class="beat"><div class="tc">11–17 sn</div><div class="ln">Fotoğraf çeker. Ekranda: <strong>karnıyarık · 1 porsiyon · 310 kcal · 12g protein.</strong></div></div>
+      <div class="beat"><div class="tc">17–20 sn</div><div class="ln"><q>Türk mutfağı için yapılmış. Fark bu.</q></div></div>
+      <div class="note"><b>Uyarı:</b> rakip uygulamanın logosu ya da adı görünmesin — bulanıklaştır. <b>Çekim:</b> gerçek ev mutfağı, gerçek yemek. Stüdyo yemeği kullanma, izleyici anlıyor.</div>
+    </div>
+
+    <div class="script">
+      <div class="sh"><span class="t">Video 5 — "Sekiz saniye"</span><span class="chip">10 sn</span><span class="chip">Ürün gösterimi</span><span class="chip">Sessiz izlenebilir</span></div>
+      <div class="beat"><div class="tc">0–2 sn</div><div class="ln">Altyazı: <q>Bir öğünü kaydetmek: 8 saniye.</q> Ekranda sayaç başlar.</div></div>
+      <div class="beat"><div class="tc">2–8 sn</div><div class="ln">Kesintisiz ekran kaydı: kamera aç → çek → sonuç → onayla. Sayaç 8'de durur.</div></div>
+      <div class="beat"><div class="tc">8–10 sn</div><div class="ln">Altyazı: <q>Elle girmek: günde 18 dakika.</q> Logo.</div></div>
+      <div class="note"><b>Neden işe yarar:</b> AI fotoğraf logu kullananların 30. gün tutunması manuel loglayanların 2,5 katı<sup class="fn">6</sup> — hızın kendisi ürünün vaadi. <b>Kural:</b> ekran kaydı gerçek olsun, mockup animasyonu kullanma.</div>
+    </div>
+
+    <div class="script">
+      <div class="sh"><span class="t">Video 6 — "İptal butonu"</span><span class="chip">18 sn</span><span class="chip">Konumlandırma</span><span class="chip">Riskli · test et</span></div>
+      <div class="beat"><div class="tc">0–4 sn</div><div class="ln"><q>Uygulama aboneliğini iptal edemediğin için sinirlendiğin oldu mu?</q></div></div>
+      <div class="beat"><div class="tc">4–12 sn</div><div class="ln">Ekran kaydı: Ayarlar → Abonelik → İptal. Üç dokunuş, sayaç ekranda. Bitince onay yazısı.</div></div>
+      <div class="beat"><div class="tc">12–18 sn</div><div class="ln"><q>Üç dokunuş. Ayrıca deneme bitmeden iki gün önce sana haber veriyoruz. Kalman için uğraşmıyoruz, kalmak istemeni istiyoruz.</q></div></div>
+      <div class="note"><b>Risk:</b> iptal kolaylığını duyurmak kısa vadede iptali artırabilir. <b>Neden yine de test et:</b> kategorinin en büyük öfke kaynağı faturalandırma<sup class="fn">5</sup> ve bu açığı kimse konumlandırmaya çevirmiş değil. <b>Kural:</b> hiçbir rakibin adını anma.</div>
+    </div>
+
+    <h3>Statik görseller</h3>
+    <div class="grid two">
+      <div class="card">
+        <div class="kicker">Statik 01</div>
+        <h5>Beslenme etiketi karşılaştırması</h5>
+        <p>Gıda ambalajı etiketi estetiğinde, yan yana iki Türk yemeği ve makroları. Kalın siyah kurallar, tek renk vurgu, fotoğraf yok.</p>
+        <p><strong>Neden:</strong> akışta beliren tek "reklam gibi olmayan" format. Bilgi olarak okunuyor, reklam olarak atlanmıyor.</p>
+      </div>
+      <div class="card">
+        <div class="kicker">Statik 02</div>
+        <h5>Gün 1 → Gün 90, tabakla</h5>
+        <p>Tarihli iki tabak fotoğrafı — vücut değil, <em>öğün</em> karşılaştırması. Aynı kişi, aynı tabak, dönüşen içerik.</p>
+        <p><strong>Neden:</strong> hayatta kalan statiklerin neredeyse tamamı tarihli öncesi/sonrası<sup class="fn">12</sup>; ama vücut görseli Meta kısıtına takılıyor. Tabak, kısıtın dışında aynı işi görüyor.</p>
+      </div>
+      <div class="card">
+        <div class="kicker">Statik 03</div>
+        <h5>Tek cümlelik ekran görüntüsü</h5>
+        <p>Uygulamanın protein panelinin gerçek ekran görüntüsü, üstünde tek satır: "Kilo veriyorsun. Kas da veriyor musun?"</p>
+        <p><strong>Neden:</strong> P1 segmenti için en doğrudan mesaj. Retargeting'de kullan, soğuk kitlede değil.</p>
+      </div>
+      <div class="card">
+        <div class="kicker">Statik 04</div>
+        <h5>Yorum ekran görüntüsü</h5>
+        <p>Gerçek bir kullanıcı yorumu ya da mağaza değerlendirmesi, olduğu gibi. Rötuş yok, hafif eğri kırpma.</p>
+        <p><strong>Neden:</strong> sosyal kanıt, üretim maliyeti sıfır ve en hızlı dönen kreatif. Ancak yeterli yorum biriktikten sonra.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <span class="lbl">Üretim kuralı</span>
+      <p>Haftada 10 hook × 3 gövde × 2 CTA = 60 varyant. Hepsini çekme — hook'u değiştir, gövdeyi yeniden kullan. <strong>48 saatte %3 CTR'ye ulaşamayan kreatifi kes</strong>, tartışma. Cal AI'ın yöntemi buydu: Canva ve CapCut ile haftada onlarca hook, sonra kazananın arkasına bütçe.<sup class="fn">4</sup></p>
+    </div>
+  </section>
+
+  <!-- ============ RISK ============ -->
+  <section id="risk">
+    <div class="sec-head">
+      <div class="tag">Yürütme</div>
+      <h2>Riskler ve ilk 90 gün</h2>
+      <p>Bu planın gerçekten batabileceği dört yer ve bunlara rağmen ilk çeyrekte yapılacaklar.</p>
+    </div>
+
+    <div class="grid two">
+      <div class="card">
+        <div class="kicker">Risk · Yüksek</div>
+        <h5>Kategori konsolide oluyor</h5>
+        <p>MyFitnessPal Cal AI'ı aldı; 280 milyon kayıtlı kullanıcı artık AI fotoğraf loguna da sahip.<sup class="fn">2</sup> Fiyat baskısı gelecek.</p>
+        <p><strong>Karşılık:</strong> onlarla kalori sayacı olarak yarışma. GLP-1 + Türk mutfağı kesişimi onların ilgilenmeyeceği kadar dar, senin yaşayacağın kadar geniş.</p>
+      </div>
+      <div class="card">
+        <div class="kicker">Risk · Yüksek</div>
+        <h5>Sağlık iddiası politikaları</h5>
+        <p>GLP-1 içeriği hem mağaza incelemesinde hem reklam onayında hassas. Yanlış çerçeve, hesabın kapanması demek.</p>
+        <p><strong>Karşılık:</strong> baştan "takip ve bilgilendirme aracı" olarak konumlan. Doz önerme, ilaç adı üzerinden pazarlama yapma, tıbbi sonuç vaat etme.</p>
+      </div>
+      <div class="card">
+        <div class="kicker">Risk · Orta</div>
+        <h5>Türk yemeği veri seti maliyeti</h5>
+        <p>Farkın tamamı buradan geliyor, ama veri toplamak yavaş ve pahalı.</p>
+        <p><strong>Karşılık:</strong> TurkishFoods-25 gibi açık setlerle başla<sup class="fn">9</sup>, kullanıcı düzeltmelerini veri hattına bağla. İlk 1.000 kullanıcı senin etiketleyicin.</p>
+      </div>
+      <div class="card">
+        <div class="kicker">Risk · Orta</div>
+        <h5>TR gelirinin yetmemesi</h5>
+        <p>TR ARPU'su tek başına şirketi taşımaz.</p>
+        <p><strong>Karşılık:</strong> TR'yi hedef değil, ucuz test alanı say. 30. gün tutunma %20'yi geçtiği gün ABD'ye aç — daha erken değil, daha geç hiç değil.</p>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="p">
+        <span class="when">Hafta 1–2 · Doğrulama</span>
+        <span class="what">Kod yazmadan önce</span>
+        <ul>
+          <li>50 rakip reklamını Meta reklam kütüphanesinden elle topla, hook'larına göre etiketle.</li>
+          <li>GLP-1 kullanan 30 kişiyle görüş. Tek soru: son bir ayda beslenmene dair neyi bilmediğin için endişelendin?</li>
+          <li>3 tematik içerik hesabını aç, ürün yokken içerik üretmeye başla.</li>
+        </ul>
+      </div>
+      <div class="p">
+        <span class="when">Hafta 3–8 · MVP</span>
+        <span class="what">Dalga 1 özellikleri</span>
+        <ul>
+          <li>Türk mutfağı tanıma + protein önce arayüz + Türkçe sesli kayıt.</li>
+          <li>Onboarding'i 22 ekrandan aşağı indirme; plan animasyonunu atlama.</li>
+          <li>İptal akışını ilk günden düzgün kur — sonradan eklenen bir şey değil.</li>
+        </ul>
+      </div>
+      <div class="p">
+        <span class="when">Hafta 9–12 · Ölçüm</span>
+        <span class="what">Sayıya bak, hikâyeye değil</span>
+        <ul>
+          <li>200 beta kullanıcı, haftada 15 organik video, 10 hook testi.</li>
+          <li>Paywall'da 3 deney: fiyat, deneme uzunluğu, CTA metni.</li>
+          <li>Karar eşiği: <strong>30. gün tutunma %20'nin altındaysa</strong> ücretli reklama geçme, ürüne dön.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout">
+      <span class="lbl">Tek metrik</span>
+      <p>Bu işte indirme sayısı da, ilk ay geliri de yanıltıcı. İzlenecek tek sayı <strong>30. gün tutunma</strong>. Kategori ortalaması %3–10; sen %20'yi hedefliyorsun. Bu sayı tutmadan reklam harcaması yapmak, delik kovaya su taşımak.</p>
+    </div>
+  </section>
+
+  <!-- ============ KAYNAKLAR ============ -->
+  <section id="kaynaklar" class="sources">
+    <h3>Kaynaklar</h3>
+    <ol>
+      <li><a href="https://getlatka.com/companies/calai.app">Latka — Cal AI Revenue 2026: $40M ARR (Bootstrapped)</a> ve <a href="https://www.inc.com/ben-sherry/he-built-an-ai-app-in-high-school-made-40m-and-sold-to-myfitnesspal-now-hes-aiming-even-bigger/91307748">Inc. — kurucu röportajı</a></li>
+      <li><a href="https://techcrunch.com/2026/03/02/myfitnesspal-has-acquired-cal-ai-the-viral-calorie-app-built-by-teens/">TechCrunch — MyFitnessPal has acquired Cal AI</a></li>
+      <li><a href="https://superwall.com/case-studies/cal-ai">Superwall — Cal AI paywall vaka incelemesi (61 deney, 3x gelir)</a></li>
+      <li><a href="https://stormy.ai/blog/cal-ai-tiktok-marketing-playbook-2026">Stormy — Cal AI TikTok Marketing Playbook 2026</a></li>
+      <li><a href="https://nutrola.app/en/blog/we-analyzed-50000-calorie-tracker-reviews-what-users-actually-complain-about-2026">Nutrola — 50.000 kalori takip uygulaması yorumunun analizi</a> ve <a href="https://kimola.com/blog/understanding-calorie-tracking-and-nutrition-apps-through-customer-feedback-analysis">Kimola — müşteri geri bildirim analizi</a></li>
+      <li><a href="https://sahha.ai/blog/health-app-churn-retention/">Sahha — Why Most Health App Users Churn Within 90 Days</a> ve <a href="https://retentioncheck.com/churn-benchmarks/fitness-apps">RetentionCheck — Fitness App Retention &amp; Churn 2026</a></li>
+      <li><a href="https://www.platelens.app/blog/best-ai-calorie-counter-apps">PlateLens — Best AI Calorie Counter Apps 2026</a> ve <a href="https://fortune.com/article/best-calorie-counter-apps/">Fortune — 6 Best Calorie Counter Apps</a></li>
+      <li><a href="https://learnmuscles.com/blog/2025/11/27/6-best-glp-1-tracking-apps-compared-which-app-actually-works-in-2026/">LearnMuscles — 6 Best GLP-1 Tracking Apps Compared</a> ve <a href="https://nutrola.app/en/blog/best-app-to-track-protein-on-glp1-medication">Nutrola — GLP-1'de protein takibi</a></li>
+      <li><a href="https://huggingface.co/datasets/yunusserhat/TurkishFoods-25">Hugging Face — TurkishFoods-25 veri seti (11.461 görsel, 25 yemek)</a> ve <a href="https://kalorita.app/blog/fotograftan-kalori">Kalorita — fotoğraftan kalori hesaplama, Türk mutfağı doğruluğu</a></li>
+      <li><a href="https://www.revenuecat.com/blog/growth/web-to-app-funnels">RevenueCat — Web-to-app funnels: the complete 2026 guide</a> ve <a href="https://blog.funnelfox.com/web-funnels-insights-and-trends/">FunnelFox — 311 funnel analizi</a></li>
+      <li><a href="https://payments.tr/blog/mobil-uygulama-ici-odeme-in-app-purchase-turkiye">payments.tr — Türkiye uygulama içi ödeme rehberi</a> ve <a href="https://www.muhasebenews.com/app-store-ve-google-play-gelirlerinin-vergilendirilmesi-2026-mobil-uygulama-abonelik-ve-uygulama-ici-satin-alma-gelirlerinde-kdv-ve-kurumlar-vergisi/">Muhasebe News — 2026 KDV ve vergilendirme</a></li>
+      <li><a href="https://brandsearch.co/blog/winning-meta-ad-patterns-2026">Brandsearch — 500+ kreatiften kazanan Meta reklam kalıpları</a>, <a href="https://benly.ai/learn/meta-ads/meta-ads-fitness-wellness-brands">Benly — Meta Ads for Fitness &amp; Wellness Brands</a> ve <a href="https://www.magier.com/blog/meta-ads-creative-best-practices-for-health-and-fitness-brands">Magier — sağlık kreatif uyum kuralları</a></li>
+    </ol>
+  </section>
+
+  </main>
+</div>
+</div>
