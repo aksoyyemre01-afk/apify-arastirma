@@ -1,0 +1,51 @@
+name: Weekly Content Generation
+
+on:
+  schedule:
+    # Her Pazartesi 06:00 UTC (TR saatiyle 09:00)
+    - cron: "0 6 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate weekly content
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
+          ELEVENLABS_MODEL: ${{ vars.ELEVENLABS_MODEL }}
+          CONTENT_LANGUAGE: ${{ vars.CONTENT_LANGUAGE }}
+          NEWS_LANG: ${{ vars.NEWS_LANG }}
+          NEWS_GL: ${{ vars.NEWS_GL }}
+        run: python run.py --mode weekly
+
+      - name: Upload audio files as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-${{ github.run_id }}
+          path: output/**/*.mp3
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Commit generated scripts and state
+        run: |
+          git config user.name "content-bot"
+          git config user.email "content-bot@users.noreply.github.com"
+          git add output state
+          git diff --cached --quiet || git commit -m "Add weekly generated content ($(date +%F))"
+          git push
