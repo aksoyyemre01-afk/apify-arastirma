@@ -19,7 +19,13 @@ Senaryo yazımı (Gemini API, structured JSON çıktı)
 Seslendirme (ElevenLabs TTS)
         │
         ▼
-output/<tarih>/<video-klasörü>/ altında script.md + script.json (+ audio.mp3)
+output/<tarih>/<video-klasörü>/ altında script.md + script.json + audio.mp3
+        │
+        ▼  (build_video.py, ayrı adım)
+Pexels/Pixabay'den klip + ffmpeg birleştirme + altyazı
+        │
+        ▼
+video.mp4 (aynı klasörde)
 ```
 
 - **Konu araştırma** (`src/research.py`): Apify kullanılmıyor. Önce
@@ -38,6 +44,14 @@ output/<tarih>/<video-klasörü>/ altında script.md + script.json (+ audio.mp3)
 - **Tekrar önleme** (`src/state.py`): Hangi konunun ne zaman/ne formatta
   kullanıldığı `state/used_topics.json`'da tutulur, bu dosya her haftalık
   çalışmadan sonra repoya commit edilir.
+- **Video oluşturma** (`build_video.py`, `src/video_builder.py`): script.json +
+  audio.mp3'ten dikey (1080x1920) .mp4 üretir. Her "Görsel Not" için
+  `src/keywords.py` Gemini ile İngilizce bir arama sorgusu üretir,
+  `src/stock_media.py` bu sorguyla Pexels'ten (önce video, sonra foto),
+  bulamazsa Pixabay'den bir klip indirir; hiçbiri bulunamazsa düz renkli bir
+  placeholder sahne kullanılır (pipeline hiçbir zaman tamamen durmaz).
+  Sahneler ses süresine eşit paylaştırılır, ffmpeg ile art arda eklenir,
+  `src/subtitles.py`'nin ürettiği .srt altyazı üzerine gömülür.
 
 ## Kurulum (local test)
 
@@ -48,6 +62,22 @@ pip install -r requirements.txt
 
 cp .env.example .env
 # .env dosyasını aç, GEMINI_API_KEY ve ELEVENLABS_API_KEY değerlerini gir
+```
+
+Video oluşturma adımı (`build_video.py`) için ayrıca **ffmpeg** gerekir:
+
+```bash
+# macOS
+brew install ffmpeg
+
+# Ubuntu/Debian
+sudo apt-get update && sudo apt-get install -y ffmpeg
+
+# Windows (PowerShell, winget ile)
+winget install ffmpeg
+# veya: choco install ffmpeg
+# Kurulumdan sonra yeni bir terminal aç ki PATH güncellensin, sonra doğrula:
+ffmpeg -version
 ```
 
 ### Önce API çağrısı yapmadan boru hattını test et
@@ -80,6 +110,27 @@ Diğer kullanışlı komutlar:
 python run.py --mode long                    # sadece uzun video
 python run.py --mode shorts --shorts-count 5  # örn. 5 short üret
 ```
+
+### Video (.mp4) oluşturma
+
+Bir short klasöründe `script.json` (visual_notes içermeli — yani uzun
+videolar değil, sadece short'lar destekleniyor) ve `audio.mp3` hazırsa:
+
+```bash
+python build_video.py --dir output/2026-09-16/airbaltic-iflasi
+```
+
+Bu, `PEXELS_API_KEY` ve/veya `PIXABAY_API_KEY` ile her görsel not için bir
+klip indirir, ffmpeg ile ses + altyazıyla birleştirir ve aynı klasöre
+`video.mp4` olarak kaydeder. İkisi de `.env`'de tanımlı değilse video yine
+üretilir ama stok klip yerine düz renkli placeholder sahneler kullanılır.
+
+Ara dosyaları (indirilen klipler, segment videoları) silmeden debug etmek
+istersen: `--keep-assets`.
+
+Pexels/Pixabay anahtarlarını buradan alabilirsin (ikisi de ücretsiz):
+- Pexels: https://www.pexels.com/api/
+- Pixabay: https://pixabay.com/api/docs/
 
 ## GitHub Actions ile haftalık otomasyon
 
@@ -121,6 +172,8 @@ Repo → Settings → Secrets and variables → Actions → **Secrets**:
 | `SHORTS_PER_WEEK` | `3` | |
 | `LONG_PER_WEEK` | `1` | |
 | `NEWS_LANG` / `NEWS_GL` | `en-US` / `US` | Google News RSS arama dili/bölgesi |
+| `PEXELS_API_KEY` | — | `build_video.py` için, opsiyonel ama önerilir |
+| `PIXABAY_API_KEY` | — | `build_video.py` için, opsiyonel ama önerilir (Pexels'te bulunamazsa yedek) |
 
 ## Konu bankasını genişletme
 
@@ -139,3 +192,10 @@ Repo → Settings → Secrets and variables → Actions → **Secrets**:
   gereken bir noktadır.
 - `--dry-run` state'i güncellemez, yani dry-run çalıştırmaları konu
   havuzunu tüketmez.
+- `build_video.py` şu an sadece **short** senaryoları destekliyor (uzun
+  videoların şeması `visual_notes` içermiyor). Ayrıca henüz `run.py`/GitHub
+  Actions akışına otomatik bağlanmadı — her klasör için elle çalıştırılıyor.
+- Altyazı zamanlaması gerçek kelime-hizalamalı değil; cümleler ses süresine
+  karakter sayısına orantılı dağıtılır. Çoğu short için yeterince yakın
+  ama mükemmel senkron için ElevenLabs'in timestamp özelliği entegre
+  edilebilir (şu an kapsam dışı).
