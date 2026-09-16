@@ -111,7 +111,7 @@ Repo → Settings → Secrets and variables → Actions → **Secrets**:
 | Değişken | Varsayılan | Açıklama |
 |---|---|---|
 | `GEMINI_API_KEY` | — | zorunlu |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | |
+| `GEMINI_MODEL` | `gemini-3.6-flash` | |
 | `ELEVENLABS_API_KEY` | — | zorunlu (TTS için) |
 | `ELEVENLABS_VOICE_ID` | ElevenLabs "Rachel" | kendi klonladığın/seçtiğin ses ID'si ile değiştir |
 | `CONTENT_LANGUAGE` | `tr` | senaryoların yazılacağı dil |

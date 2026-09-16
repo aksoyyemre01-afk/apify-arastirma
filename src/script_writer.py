@@ -7,7 +7,7 @@ from google.genai import types
 
 from .schemas import LongScript, ShortScript
 
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 LANGUAGE = os.environ.get("CONTENT_LANGUAGE", "tr")
 
 _client: genai.Client | None = None
