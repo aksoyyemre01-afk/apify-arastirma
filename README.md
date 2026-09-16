@@ -113,7 +113,7 @@ Repo → Settings → Secrets and variables → Actions → **Secrets**:
 | `GEMINI_API_KEY` | — | zorunlu |
 | `GEMINI_MODEL` | `gemini-3.6-flash` | |
 | `ELEVENLABS_API_KEY` | — | zorunlu (TTS için) |
-| `ELEVENLABS_VOICE_ID` | ElevenLabs "Rachel" | kendi klonladığın/seçtiğin ses ID'si ile değiştir |
+| `ELEVENLABS_VOICE_ID` | ElevenLabs "Brian" (`nPczCjzI2devNBz1zQrb`) | free planda API'den kullanılabilen premade bir ses; değiştirmek istersen ElevenLabs hesabındaki "My Voices" altında **kendi hesabına ait** (library/shared değil) bir ses ID'si kullan, aksi halde free planda aynı hata tekrar alınır |
 | `CONTENT_LANGUAGE` | `tr` | senaryoların yazılacağı dil |
 | `SHORTS_PER_WEEK` | `3` | |
 | `LONG_PER_WEEK` | `1` | |

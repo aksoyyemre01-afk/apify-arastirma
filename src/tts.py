@@ -4,7 +4,9 @@ import os
 
 from elevenlabs.client import ElevenLabs
 
-DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # ElevenLabs "Rachel" varsayılan sesi
+# "Brian" - ElevenLabs hesaplarına otomatik eklenen premade seslerden biri,
+# free planda API üzerinden kullanılabilir (library/shared sesler free planda kullanılamaz).
+DEFAULT_VOICE_ID = "nPczCjzI2devNBz1zQrb"
 
 _client: ElevenLabs | None = None
 
