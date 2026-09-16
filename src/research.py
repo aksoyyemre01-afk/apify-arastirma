@@ -77,15 +77,26 @@ def load_bank() -> list[dict]:
 
 
 def get_topics(n: int, used_ids: set[str]) -> list[dict]:
-    """n adet konu döner: önce taze haberler, sonra kullanılmamış evergreen vakalar,
-    hâlâ eksikse en eski kullanılmış evergreen vakalar tekrar kullanılır."""
+    """n adet konu döner: önce kullanılmamış evergreen (Nokia, Blockbuster, Kodak
+    tarzı herkesin tanıdığı, dramatik) vakalar, hâlâ eksikse taze haberlerle
+    tamamlanır, o da yetmezse en eski kullanılmış evergreen vakalar tekrar kullanılır.
+
+    Evergreen vakalar önceliklidir çünkü tanınmışlık = daha yüksek viral potansiyel;
+    taze haberler sadece havuzu genişletmek için tamamlayıcı olarak kullanılır."""
     if n <= 0:
         return []
 
     bank = load_bank()
     topics: list[dict] = []
 
-    fresh = _fresh_candidates({t["title"].lower() for t in bank}, max_total=n)
+    unused_bank = [t for t in bank if t["id"] not in used_ids]
+    for t in unused_bank:
+        topics.append({**t, "reference": "", "source": "evergreen"})
+        if len(topics) >= n:
+            return topics
+
+    remaining = n - len(topics)
+    fresh = _fresh_candidates({t["title"].lower() for t in bank}, max_total=remaining)
     for item in fresh:
         topics.append(
             {
@@ -100,15 +111,9 @@ def get_topics(n: int, used_ids: set[str]) -> list[dict]:
         if len(topics) >= n:
             return topics
 
-    unused_bank = [t for t in bank if t["id"] not in used_ids]
-    for t in unused_bank:
-        topics.append({**t, "reference": "", "source": "evergreen"})
-        if len(topics) >= n:
-            return topics
-
-    used_ids_list = {t["id"] for t in topics}
+    used_ids_so_far = {t["id"] for t in topics if "id" in t}
     for t in bank:
-        if t["id"] in used_ids_list:
+        if t["id"] in used_ids_so_far:
             continue
         topics.append({**t, "reference": "", "source": "evergreen-reuse"})
         if len(topics) >= n:
