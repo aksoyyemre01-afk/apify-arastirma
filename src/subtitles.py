@@ -1,15 +1,15 @@
-"""Seslendirme metninden zaman kodlu .srt altyazı dosyası üretir.
+"""Seslendirme metninden/zaman kodlarından dikey video için altyazı (.srt) üretir.
 
-Gerçek kelime-zaman hizalaması yapılmıyor (bunun için ElevenLabs'in
-"timestamps" özelliği ya da ayrı bir forced-alignment aracı gerekir); bunun
-yerine cümleler, toplam ses süresine karakter sayısına orantılı olarak
-dağıtılır. Kısa video senaryoları için yeterince yakın bir yaklaşım."""
+İki mod var:
+- build_word_srt: ElevenLabs'in "with-timestamps" endpoint'inden gelen gerçek kelime
+  zaman kodlarını kullanır (hassas, kelime kelime senkronize).
+- estimate_word_timings + build_word_srt: gerçek zaman kodu yoksa (ör. dry-run, ya da
+  ElevenLabs timestamp endpoint'i kullanılamadıysa), metni ses süresine kelime uzunluğuna
+  orantılı olarak dağıtan bir tahmin üretir. Yine kelime-kelime görünür, sadece zamanlama
+  daha az hassastır.
+"""
 
-import re
-import textwrap
-
-_WRAP_WIDTH = 42
-_MIN_SEGMENT_SECONDS = 0.8
+_MIN_WORD_SECONDS = 0.12
 
 
 def _format_timestamp(seconds: float) -> str:
@@ -24,21 +24,35 @@ def _format_timestamp(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
 
 
-def build_srt(text: str, duration: float) -> str:
-    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s.strip()]
-    if not sentences:
-        return ""
+def estimate_word_timings(text: str, duration: float) -> list[dict]:
+    """Gerçek zaman kodu yokken, kelimeleri ses süresine karakter sayısına orantılı
+    dağıtan bir tahmin üretir. [{'word':.., 'start':.., 'end':..}, ...] döner."""
+    words = text.split()
+    if not words:
+        return []
 
-    total_chars = sum(len(s) for s in sentences) or 1
+    total_chars = sum(len(w) for w in words) or 1
     entries = []
     t = 0.0
-    for i, sentence in enumerate(sentences, start=1):
-        frac = len(sentence) / total_chars
-        seg_duration = max(duration * frac, _MIN_SEGMENT_SECONDS)
+    for word in words:
+        frac = len(word) / total_chars
+        seg_duration = max(duration * frac, _MIN_WORD_SECONDS)
         start = t
-        end = min(t + seg_duration, duration) if i < len(sentences) else duration
-        wrapped = "\n".join(textwrap.wrap(sentence, width=_WRAP_WIDTH)) or sentence
-        entries.append(f"{i}\n{_format_timestamp(start)} --> {_format_timestamp(end)}\n{wrapped}\n")
+        end = min(t + seg_duration, duration)
+        entries.append({"word": word, "start": start, "end": end})
         t = end
 
+    if entries:
+        entries[-1]["end"] = duration
+    return entries
+
+
+def build_word_srt(word_timings: list[dict]) -> str:
+    """Kelime bazlı zaman kodlarından, her kelimenin kendi kısa cue'su olduğu, dinamik
+    "kelime kelime" tarzı bir .srt üretir (statik cümle bloğu yerine)."""
+    entries = []
+    for i, w in enumerate(word_timings, start=1):
+        entries.append(
+            f"{i}\n{_format_timestamp(w['start'])} --> {_format_timestamp(w['end'])}\n{w['word']}\n"
+        )
     return "\n".join(entries)

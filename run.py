@@ -9,6 +9,7 @@ Kullanım:
 """
 
 import argparse
+import json
 import os
 from datetime import date
 from pathlib import Path
@@ -18,7 +19,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from src import research, state  # noqa: E402
-from src.schemas import LongChapter, LongScript, ShortScript  # noqa: E402
+from src.schemas import LongChapter, LongScript, ShortBeat, ShortScript  # noqa: E402
 from src.utils import slugify  # noqa: E402
 
 OUTPUT_DIR = Path("output")
@@ -27,9 +28,19 @@ OUTPUT_DIR = Path("output")
 def _dry_run_short(topic: dict) -> ShortScript:
     return ShortScript(
         title=f"[DRY RUN] {topic['title']}",
-        hook="[DRY RUN] Bu bir örnek açılış cümlesidir.",
-        narration=f"[DRY RUN] {topic['title']} hakkında örnek bir seslendirme metni. Gerçek çalıştırmada bu metin Gemini tarafından üretilecek.",
-        visual_notes=["[DRY RUN] örnek sahne notu 1", "[DRY RUN] örnek sahne notu 2"],
+        hook=ShortBeat(
+            narration="[DRY RUN] Bu bir örnek açılış cümlesidir.",
+            visual_notes=["[DRY RUN] açılış sahnesi"],
+        ),
+        setup=ShortBeat(
+            narration=f"[DRY RUN] {topic['title']} hakkında örnek bir kuruluş metni. "
+            "Gerçek çalıştırmada bu metin Gemini tarafından üretilecek.",
+            visual_notes=["[DRY RUN] kuruluş sahnesi 1", "[DRY RUN] kuruluş sahnesi 2"],
+        ),
+        twist=ShortBeat(
+            narration="[DRY RUN] Örnek dramatik an / twist metni.",
+            visual_notes=["[DRY RUN] dramatik sahne 1 (kırmızı/kriz)", "[DRY RUN] dramatik sahne 2 (kırmızı/kriz)"],
+        ),
         cta="[DRY RUN] Takip etmeyi unutma!",
         hashtags=["#dryrun", "#test"],
     )
@@ -49,37 +60,59 @@ def _dry_run_long(topic: dict) -> LongScript:
     )
 
 
+_BEAT_LABELS = {
+    "hook": "Hook (0-3 sn)",
+    "setup": "Kuruluş",
+    "twist": "Dramatik An / Twist",
+}
+
+
 def _write_short(topic: dict, script: ShortScript, out_dir: Path, do_tts: bool) -> Path:
     video_dir = out_dir / f"short-{slugify(script.title)}"
     video_dir.mkdir(parents=True, exist_ok=True)
+
+    beats = [("hook", script.hook), ("setup", script.setup), ("twist", script.twist)]
+    full_narration = " ".join(beat.narration for _, beat in beats)
 
     md_lines = [
         f"# {script.title}",
         "",
         f"**Kaynak konu:** {topic['title']} ({topic.get('source', '')})",
         "",
-        f"**Hook:** {script.hook}",
-        "",
-        "## Seslendirme Metni",
-        "",
-        script.narration,
-        "",
-        "## Görsel Notlar",
-        "",
-        *[f"- {v}" for v in script.visual_notes],
-        "",
-        f"**CTA:** {script.cta}",
+    ]
+    for name, beat in beats:
+        md_lines += [
+            f"## {_BEAT_LABELS[name]}",
+            "",
+            beat.narration,
+            "",
+            "**Görsel Notlar:**",
+            "",
+            *[f"- {v}" for v in beat.visual_notes],
+            "",
+        ]
+    md_lines += [
+        f"**CTA (ekranda, seslendirilmez):** {script.cta}",
         "",
         f"**Hashtags:** {' '.join(script.hashtags)}",
         "",
     ]
     (video_dir / "script.md").write_text("\n".join(md_lines), encoding="utf-8")
-    (video_dir / "script.json").write_text(script.model_dump_json(indent=2), encoding="utf-8")
+
+    json_data = script.model_dump()
+    json_data["narration_full"] = full_narration
+    (video_dir / "script.json").write_text(
+        json.dumps(json_data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     if do_tts:
         from src import tts
 
-        tts.synthesize(script.narration, str(video_dir / "audio.mp3"))
+        word_timings = tts.synthesize_with_timestamps(full_narration, str(video_dir / "audio.mp3"))
+        if word_timings:
+            (video_dir / "word_timings.json").write_text(
+                json.dumps(word_timings, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
 
     return video_dir
 

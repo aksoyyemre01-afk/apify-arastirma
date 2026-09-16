@@ -25,20 +25,31 @@ def _get_client() -> genai.Client:
 
 SHORT_PROMPT = """Sen viral iş dünyası içerikleri yazan deneyimli bir YouTube Shorts senaristisin.
 
-Aşağıdaki gerçek şirket olayı hakkında 30-45 saniyelik (yaklaşık 85-105 kelimelik seslendirme metni) bir Shorts senaryosu yaz.
+Aşağıdaki gerçek şirket olayı hakkında 30-45 saniyelik bir Shorts senaryosu yaz.
+Senaryo TAM OLARAK 3 net bölümden oluşmalı: hook, setup, twist.
 
 Konu: {title}
 Şirket: {company}
 Olayın özeti: {angle}
 Ek kaynak (varsa): {reference}
 
-Kurallar:
-- Seslendirme metni {language} dilinde, akıcı ve konuşma diline uygun olsun.
-- İlk cümle (hook) izleyiciyi ilk 3 saniyede durdurmalı; bir şok edici gerçek, soru veya çelişki içersin.
-- Anlatım; kuruluş/yükseliş -> kritik hata/an -> sonuç -> kısa ders akışını izlesin.
-- Abartılı reklam dili kullanma, somut sayı ve gerçek olaylara dayan.
-- visual_notes alanına 4-6 kısa sahne/görsel yönlendirmesi yaz (ör. "Nokia logosu eski reklamlarla açılıyor").
-- cta alanına izleyiciyi takip etmeye/yorum yapmaya teşvik eden tek cümlelik bir kapanış yaz.
+Bölüm kuralları:
+- **hook** (0-3 saniye, ~10-18 kelime): İzleyiciyi ilk saniyede durduracak şok edici bir
+  gerçek, soru veya çelişki. visual_notes'a TEK güçlü bir açılış sahnesi yaz.
+- **setup** (~14-20 saniye, ~35-50 kelime): Şirketin kuruluşu/zirvesi/gücü - neden bu kadar
+  büyük/güvenilir/başarılıydı. visual_notes'a 2 sahne yaz.
+- **twist** (~12-18 saniye, ~30-45 kelime): Senaryonun EN DRAMATİK anı - kritik hata, çöküş
+  veya kriz. visual_notes'a 2 sahne yaz ve bu sahneleri MUTLAKA dramatik, yüksek kontrastlı,
+  kriz hissi veren somut görsellerle tarif et (ör. "kırmızı alarm ışıkları yanan bir ofis",
+  "kapanan mağaza kepenkleri", "aşağı düşen kırmızı bir grafik çizgisi", "enkaz/terk edilmiş bina").
+
+Genel kurallar:
+- Tüm seslendirme metinleri {language} dilinde, akıcı ve konuşma diline uygun olsun.
+- Somut sayı ve gerçek olaylara dayan, abartılı reklam dilinden kaçın.
+- Her visual_notes maddesi somut ve görsel olarak spesifik olsun (ör. "ofis" yerine
+  "boş, karanlık bir kurumsal ofis, kapalı jaluziler").
+- cta alanına izleyiciyi takip etmeye/yorum yapmaya teşvik eden tek cümlelik bir kapanış yaz
+  (bu metin seslendirilmeyecek, sadece ekranda görünecek).
 - hashtags alanına 5-8 adet ilgili, İngilizce ve {language} dilinde karışık hashtag ekle.
 - Sadece istenen JSON şemasına uygun çıktı üret, ekstra açıklama ekleme."""
 

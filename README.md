@@ -36,22 +36,36 @@ video.mp4 (aynı klasörde)
   aramalarla) taze haberlerle tamamlanır. Böylece içerik hep güncel ama
   düşük profilli haberlerle sınırlı kalmaz.
 - **Senaryo yazımı** (`src/script_writer.py`): Gemini API'ye structured output
-  (`response_schema`) ile çağrı yapılır; model doğrudan JSON döner (başlık,
-  hook, seslendirme metni, görsel notlar, CTA, hashtag) — ekstra metin
-  ayrıştırma gerekmez.
-- **Seslendirme** (`src/tts.py`): Sadece `narration` alanı (görsel notlar hariç,
-  temiz konuşma metni) ElevenLabs'e gönderilir.
+  (`response_schema`) ile çağrı yapılır; short'lar için model TAM OLARAK 3
+  bölümden oluşan bir JSON döner - **hook** (0-3 sn, tek çarpıcı sahne),
+  **setup** (kuruluş/bağlam, 2 sahne), **twist** (senaryonun en dramatik anı,
+  2 sahne - görselleri kasıtlı olarak kriz/kontrast temalı istenir). Her
+  bölümün kendi `narration` + `visual_notes`'u var; `cta` ayrı, seslendirilmeyen
+  bir kapanış metnidir.
+- **Seslendirme** (`src/tts.py`): `synthesize_with_timestamps()` ElevenLabs'in
+  karakter bazlı zaman kodlarını kelime bazlı zamanlamaya indirger
+  (`word_timings.json` olarak kaydedilir) - bu, altyazıların gerçek kelime
+  senkronizasyonu için kullanılır. Endpoint kullanılamazsa (plan/SDK
+  desteklemiyorsa) sessizce düz seslendirmeye düşer.
 - **Tekrar önleme** (`src/state.py`): Hangi konunun ne zaman/ne formatta
   kullanıldığı `state/used_topics.json`'da tutulur, bu dosya her haftalık
   çalışmadan sonra repoya commit edilir.
 - **Video oluşturma** (`build_video.py`, `src/video_builder.py`): script.json +
-  audio.mp3'ten dikey (1080x1920) .mp4 üretir. Her "Görsel Not" için
-  `src/keywords.py` Gemini ile İngilizce bir arama sorgusu üretir,
-  `src/stock_media.py` bu sorguyla Pexels'ten (önce video, sonra foto),
-  bulamazsa Pixabay'den bir klip indirir; hiçbiri bulunamazsa düz renkli bir
-  placeholder sahne kullanılır (pipeline hiçbir zaman tamamen durmaz).
-  Sahneler ses süresine eşit paylaştırılır, ffmpeg ile art arda eklenir,
-  `src/subtitles.py`'nin ürettiği .srt altyazı üzerine gömülür.
+  audio.mp3'ten dikey (1080x1920) .mp4 üretir.
+  - Her sahne için `src/keywords.py` Gemini ile spesifik/sinematik bir
+    İngilizce arama sorgusu üretir (ör. "empty corporate office dramatic
+    lighting"); twist sahneleri kırmızı/kriz temalı modifiyerlerle güçlendirilir.
+  - `src/stock_media.py` sırayla Pexels video → Pexels foto → Pixabay video →
+    Pixabay foto dener, her aramada dönen sonuçlar arasından **en yüksek
+    çözünürlüklü** dosyayı seçer; art arda iki sahne aynı türde (ikisi de
+    foto/video) olmasın diye önceki sahnenin türü bir sonrakinde dışlanır.
+    Hiçbir kaynak bulunamazsa düz renkli bir placeholder sahne kullanılır
+    (pipeline hiçbir zaman tamamen durmaz).
+  - Sahneler ses süresine eşit paylaştırılır, ffmpeg ile art arda eklenir.
+  - Altyazı `word_timings.json` varsa gerçek kelime zamanlamasıyla, yoksa
+    `src/subtitles.py`'nin tahmini kelime dağıtımıyla üretilir - **kelime
+    kelime** görünen, kalın/büyük, dinamik bir stille gömülür (statik cümle
+    bloğu değil).
 
 ## Kurulum (local test)
 
@@ -193,9 +207,15 @@ Repo → Settings → Secrets and variables → Actions → **Secrets**:
 - `--dry-run` state'i güncellemez, yani dry-run çalıştırmaları konu
   havuzunu tüketmez.
 - `build_video.py` şu an sadece **short** senaryoları destekliyor (uzun
-  videoların şeması `visual_notes` içermiyor). Ayrıca henüz `run.py`/GitHub
-  Actions akışına otomatik bağlanmadı — her klasör için elle çalıştırılıyor.
-- Altyazı zamanlaması gerçek kelime-hizalamalı değil; cümleler ses süresine
-  karakter sayısına orantılı dağıtılır. Çoğu short için yeterince yakın
-  ama mükemmel senkron için ElevenLabs'in timestamp özelliği entegre
-  edilebilir (şu an kapsam dışı).
+  videoların şeması hook/setup/twist yapısında değil). Ayrıca henüz
+  `run.py`/GitHub Actions akışına otomatik bağlanmadı — her klasör için elle
+  çalıştırılıyor.
+- Eski (bu güncellemeden önce üretilmiş) script.json dosyaları hâlâ çalışır -
+  `video_builder.py` düz `visual_notes` formatını da destekler - ama twist
+  dramatikleştirmesi ve beat bazlı yapı olmadan.
+- ElevenLabs'in `convert_with_timestamps` endpoint'i her hesap/plan/SDK
+  sürümünde garanti değildir; kullanılamazsa kod sessizce düz seslendirmeye
+  ve tahmini kelime zamanlamasına düşer (yine kelime-kelime görünür, sadece
+  daha az hassas senkronla).
+- Placeholder sahnelerde (stok klip bulunamadığında) `to_search_query`
+  Gemini çağrısı yine de yapılır; sadece stok medya sonucu boş döner.

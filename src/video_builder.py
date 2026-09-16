@@ -1,13 +1,21 @@
 """script.json + audio.mp3'ten ffmpeg ile dikey (9:16) YouTube Shorts videosu üretir.
 
 Adımlar:
-1. script.json'daki her "visual_notes" öğesi için Gemini ile İngilizce arama
-   sorgusu üretilir, Pexels/Pixabay'den eşleşen klip indirilir (bulunamazsa
-   düz renkli bir placeholder sahne kullanılır).
+1. script.json'daki her sahne (hook/setup/twist bölümlerindeki visual_notes) için
+   Gemini ile spesifik/sinematik bir İngilizce arama sorgusu üretilir - twist
+   sahneleri dramatik/kriz temalı modifiyerlerle güçlendirilir. Pexels'ten (önce
+   video, sonra foto), bulunamazsa Pixabay'den en yüksek çözünürlüklü klip
+   indirilir; art arda iki sahne aynı türde (ikisi de foto/video) olmasın diye
+   önceki sahnenin türü bir sonrakinde dışlanır. Hiçbir kaynak bulunamazsa düz
+   renkli bir placeholder sahne kullanılır.
 2. Her klip, ses süresine eşit paylaştırılmış bir segment uzunluğuna
    sığdırılıp 1080x1920'ye ölçeklenir/kırpılır.
-3. Segmentler art arda eklenir (concat), seslendirme ile birleştirilir,
-   üzerine .srt altyazı gömülür.
+3. Segmentler art arda eklenir (concat), seslendirme ile birleştirilir, üzerine
+   kelime-kelime senkronize, büyük/kalın dinamik altyazı gömülür (ElevenLabs'in
+   ürettiği gerçek kelime zaman kodları varsa onlar, yoksa tahmini zamanlama).
+
+Eski (hook/setup/twist'ten önceki) düz `visual_notes` formatındaki script.json'lar
+da desteklenir - bkz. _extract_scenes.
 """
 
 import json
@@ -97,6 +105,32 @@ def _ffmpeg_filter_path(path: Path) -> str:
     return p
 
 
+def _extract_scenes(data: dict) -> tuple[list[dict], str]:
+    """script.json'dan sahneleri ve tam seslendirme metnini çıkarır.
+
+    Yeni format (hook/setup/twist beat yapısı) ve eski format (düz visual_notes
+    listesi) her ikisi de desteklenir. Döndürülen her sahne
+    {"note": str, "dramatic": bool} şeklindedir - dramatic=True sadece twist
+    bölümündeki sahnelerde olur."""
+    hook = data.get("hook")
+    if isinstance(hook, dict):
+        scenes = []
+        narration_parts = []
+        for beat_name, dramatic in (("hook", False), ("setup", False), ("twist", True)):
+            beat = data.get(beat_name) or {}
+            narration_parts.append(beat.get("narration", ""))
+            for note in beat.get("visual_notes", []):
+                scenes.append({"note": note, "dramatic": dramatic})
+        narration = data.get("narration_full") or " ".join(narration_parts)
+        return scenes, narration
+
+    # eski format: düz visual_notes listesi + narration
+    visual_notes = data.get("visual_notes") or []
+    scenes = [{"note": n, "dramatic": False} for n in visual_notes]
+    narration = data.get("narration", "")
+    return scenes, narration
+
+
 def build_video(video_dir: Path, keep_assets: bool = False) -> Path:
     video_dir = Path(video_dir)
     script_path = video_dir / "script.json"
@@ -111,17 +145,16 @@ def build_video(video_dir: Path, keep_assets: bool = False) -> Path:
         )
 
     data = json.loads(script_path.read_text(encoding="utf-8"))
-    visual_notes = data.get("visual_notes")
-    if not visual_notes:
+    scenes, narration = _extract_scenes(data)
+    if not scenes:
         raise VideoBuildError(
-            "script.json içinde 'visual_notes' yok. Video oluşturma şu an sadece "
-            "short (Görsel Notlar içeren) senaryolar için destekleniyor."
+            "script.json içinde görsel sahne bulunamadı (ne hook/setup/twist ne de "
+            "visual_notes). Video oluşturma şu an sadece short senaryoları için destekleniyor."
         )
-    narration = data.get("narration", "")
     company_hint = data.get("title", "")
 
     total_duration = _probe_duration(audio_path)
-    segment_count = len(visual_notes)
+    segment_count = len(scenes)
     seg_duration = total_duration / segment_count
 
     assets_dir = video_dir / "assets"
@@ -129,10 +162,13 @@ def build_video(video_dir: Path, keep_assets: bool = False) -> Path:
 
     seg_paths = []
     print(f"Toplam ses süresi: {total_duration:.1f} sn, {segment_count} sahne (~{seg_duration:.1f} sn/sahne)")
-    for i, note in enumerate(visual_notes):
-        query = keywords.to_search_query(note, company=company_hint)
-        print(f"  [{i + 1}/{segment_count}] \"{note[:60]}\" -> arama: \"{query}\"")
-        clip = stock_media.fetch_clip(query, assets_dir, i)
+    last_kind: str | None = None
+    for i, scene in enumerate(scenes):
+        note, dramatic = scene["note"], scene["dramatic"]
+        query = keywords.to_search_query(note, company=company_hint, dramatic=dramatic)
+        tag = " [DRAMATİK]" if dramatic else ""
+        print(f"  [{i + 1}/{segment_count}]{tag} \"{note[:60]}\" -> arama: \"{query}\"")
+        clip = stock_media.fetch_clip(query, assets_dir, i, exclude_kind=last_kind)
         seg_path = assets_dir / f"seg_{i:02d}.mp4"
 
         if clip is None:
@@ -140,8 +176,10 @@ def build_video(video_dir: Path, keep_assets: bool = False) -> Path:
             _build_segment_placeholder(seg_path, seg_duration, i)
         elif clip["kind"] == "video":
             _build_segment_from_video(clip["path"], seg_path, seg_duration)
+            last_kind = "video"
         else:
             _build_segment_from_photo(clip["path"], seg_path, seg_duration)
+            last_kind = "photo"
         seg_paths.append(seg_path)
 
     concat_list = assets_dir / "concat.txt"
@@ -156,8 +194,14 @@ def build_video(video_dir: Path, keep_assets: bool = False) -> Path:
         str(visual_track),
     ])
 
+    timings_path = video_dir / "word_timings.json"
+    if timings_path.exists():
+        word_timings = json.loads(timings_path.read_text(encoding="utf-8"))
+    else:
+        word_timings = subtitles.estimate_word_timings(narration, total_duration)
+
     captions_path = video_dir / "captions.srt"
-    captions_path.write_text(subtitles.build_srt(narration, total_duration), encoding="utf-8")
+    captions_path.write_text(subtitles.build_word_srt(word_timings), encoding="utf-8")
 
     output_path = video_dir / "video.mp4"
     subtitle_arg = _ffmpeg_filter_path(captions_path)
@@ -172,8 +216,9 @@ def build_video(video_dir: Path, keep_assets: bool = False) -> Path:
             + [
                 "-vf",
                 f"subtitles='{subtitle_arg}':force_style="
-                "'Fontsize=20,PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
-                "BorderStyle=1,Outline=2,Alignment=2,MarginV=120'",
+                f"'PlayResX={WIDTH},PlayResY={HEIGHT},"
+                "Fontsize=34,Bold=1,PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
+                "BorderStyle=1,Outline=3,Shadow=1,Alignment=2,MarginV=140,MarginL=48,MarginR=48'",
             ]
             + encode_args
             + [str(output_path)]

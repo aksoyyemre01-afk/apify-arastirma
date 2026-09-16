@@ -1,12 +1,29 @@
 from pydantic import BaseModel, Field
 
 
+class ShortBeat(BaseModel):
+    narration: str = Field(description="Bu bölümün seslendirme metni, doğal konuşma dili")
+    visual_notes: list[str] = Field(description="Bu bölüm için sahne/görsel yönlendirme notları")
+
+
 class ShortScript(BaseModel):
     title: str = Field(description="Videonun çekici, tıklanabilir başlığı")
-    hook: str = Field(description="İlk 3 saniyede izleyiciyi durduracak açılış cümlesi")
-    narration: str = Field(description="Seslendirme metninin tamamı (hook dahil), tek parça, doğal konuşma dili")
-    visual_notes: list[str] = Field(description="Sahne/görsel yönlendirme notları, kısa maddeler halinde")
-    cta: str = Field(description="Videonun sonundaki çağrı (takip et, yorum yap vb.)")
+    hook: ShortBeat = Field(
+        description="0-3 saniyelik açılış: izleyiciyi durduracak şok edici bir gerçek/soru/çelişki, "
+        "~10-18 kelime, TEK güçlü açılış sahnesi"
+    )
+    setup: ShortBeat = Field(
+        description="Kuruluş/bağlam bölümü: şirketin zirvesi/gücü neden böyleydi, ~35-50 kelime, 2 sahne"
+    )
+    twist: ShortBeat = Field(
+        description="Senaryonun EN DRAMATİK anı: kritik hata/çöküş/kriz, ~30-45 kelime, 2 sahne; "
+        "bu bölümün visual_notes'u MUTLAKA dramatik/yüksek kontrastlı, kriz hissi veren görseller "
+        "tarif etmeli (kırmızı ışık, alarm, düşen grafik, enkaz, kapanan kapılar vb.)"
+    )
+    cta: str = Field(
+        description="Videonun sonunda ekranda görünecek çağrı metni (takip et/yorum yap vb.); "
+        "seslendirilmez, sadece görsel/alt yazı olarak kullanılır"
+    )
     hashtags: list[str] = Field(description="YouTube Shorts için önerilen hashtag listesi")
 
 
