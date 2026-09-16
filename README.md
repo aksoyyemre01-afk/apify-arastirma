@@ -19,14 +19,16 @@ Senaryo yazımı (Gemini API, structured JSON çıktı)
 Seslendirme (ElevenLabs TTS)
         │
         ▼
-output/<tarih>/ altında .md + .json (+ .mp3)
+output/<tarih>/<video-klasörü>/ altında script.md + script.json (+ audio.mp3)
 ```
 
-- **Konu araştırma** (`src/research.py`): Apify kullanılmıyor. Önce Google News
-  RSS'ten ("company files for bankruptcy" gibi aramalarla) taze haberler
-  denenir; bulunamazsa `data/topics_bank.json` içindeki 25+ klasik vakadan
-  (Nokia, Kodak, Enron, Theranos, WeWork, FTX...) kullanılmamış olanlar seçilir.
-  Böylece RSS boş dönse bile içerik akışı hiç kesilmez.
+- **Konu araştırma** (`src/research.py`): Apify kullanılmıyor. Önce
+  `data/topics_bank.json` içindeki 35+ tanınmış, dramatik klasik vakadan
+  (Nokia, Blockbuster, Kodak, Enron, Theranos, WeWork, FTX...) kullanılmamış
+  olanlar seçilir — tanınmışlık = daha yüksek viral potansiyel. Bu vakalar
+  yetmezse Google News RSS'ten ("company files for bankruptcy" gibi
+  aramalarla) taze haberlerle tamamlanır. Böylece içerik hep güncel ama
+  düşük profilli haberlerle sınırlı kalmaz.
 - **Senaryo yazımı** (`src/script_writer.py`): Gemini API'ye structured output
   (`response_schema`) ile çağrı yapılır; model doğrudan JSON döner (başlık,
   hook, seslendirme metni, görsel notlar, CTA, hashtag) — ekstra metin
@@ -55,7 +57,8 @@ python run.py --mode weekly --dry-run
 ```
 
 Bu, gerçek Gemini/ElevenLabs çağrısı yapmadan sahte içerikle `output/<tarih>/`
-altına dosyalar üretir — dosya yapısını ve akışı görmek için.
+altına, her video kendi klasöründe olacak şekilde dosyalar üretir — dosya
+yapısını ve akışı görmek için.
 
 ### Gerçek anahtarlarla test (önce sadece senaryo, TTS'siz)
 
@@ -63,7 +66,7 @@ altına dosyalar üretir — dosya yapısını ve akışı görmek için.
 python run.py --mode shorts --shorts-count 1 --skip-tts
 ```
 
-`output/<tarih>/short-*.md` dosyasını aç, senaryo kalitesini kontrol et.
+`output/<tarih>/short-*/script.md` dosyasını aç, senaryo kalitesini kontrol et.
 
 ### Tam haftalık üretim (senaryo + seslendirme)
 

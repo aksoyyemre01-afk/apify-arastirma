@@ -50,8 +50,8 @@ def _dry_run_long(topic: dict) -> LongScript:
 
 
 def _write_short(topic: dict, script: ShortScript, out_dir: Path, do_tts: bool) -> Path:
-    slug = slugify(script.title)
-    base = out_dir / f"short-{slug}"
+    video_dir = out_dir / f"short-{slugify(script.title)}"
+    video_dir.mkdir(parents=True, exist_ok=True)
 
     md_lines = [
         f"# {script.title}",
@@ -73,20 +73,20 @@ def _write_short(topic: dict, script: ShortScript, out_dir: Path, do_tts: bool) 
         f"**Hashtags:** {' '.join(script.hashtags)}",
         "",
     ]
-    base.with_suffix(".md").write_text("\n".join(md_lines), encoding="utf-8")
-    base.with_suffix(".json").write_text(script.model_dump_json(indent=2), encoding="utf-8")
+    (video_dir / "script.md").write_text("\n".join(md_lines), encoding="utf-8")
+    (video_dir / "script.json").write_text(script.model_dump_json(indent=2), encoding="utf-8")
 
     if do_tts:
         from src import tts
 
-        tts.synthesize(script.narration, str(base.with_suffix(".mp3")))
+        tts.synthesize(script.narration, str(video_dir / "audio.mp3"))
 
-    return base
+    return video_dir
 
 
 def _write_long(topic: dict, script: LongScript, out_dir: Path, do_tts: bool) -> Path:
-    slug = slugify(script.title)
-    base = out_dir / f"long-{slug}"
+    video_dir = out_dir / f"long-{slugify(script.title)}"
+    video_dir.mkdir(parents=True, exist_ok=True)
 
     md_lines = [
         f"# {script.title}",
@@ -104,15 +104,15 @@ def _write_long(topic: dict, script: LongScript, out_dir: Path, do_tts: bool) ->
         f"**Hashtags:** {' '.join(script.hashtags)}",
         "",
     ]
-    base.with_suffix(".md").write_text("\n".join(md_lines), encoding="utf-8")
-    base.with_suffix(".json").write_text(script.model_dump_json(indent=2), encoding="utf-8")
+    (video_dir / "script.md").write_text("\n".join(md_lines), encoding="utf-8")
+    (video_dir / "script.json").write_text(script.model_dump_json(indent=2), encoding="utf-8")
 
     if do_tts:
         from src import tts
 
-        tts.synthesize(script.full_narration, str(base.with_suffix(".mp3")))
+        tts.synthesize(script.full_narration, str(video_dir / "audio.mp3"))
 
-    return base
+    return video_dir
 
 
 def run(mode: str, shorts_count: int, long_count: int, do_tts: bool, dry_run: bool) -> None:
