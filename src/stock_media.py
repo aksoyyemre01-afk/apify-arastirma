@@ -1,7 +1,9 @@
 """Pexels / Pixabay'den görsel/video klip arama ve indirme.
 
 En az bir API anahtarı (PEXELS_API_KEY veya PIXABAY_API_KEY) tanımlıysa kullanılır.
-Her arama, birden fazla sonuç arasından en yüksek çözünürlüklü dosyayı seçer.
+Her kaynaktan (çözünürlüğe göre sıralı) birden fazla aday toplanır; her aday
+indirilip src/relevance.py ile konuyla gerçekten alakalı mı diye kontrol edilir -
+ilk alakalı bulunan kullanılır, değilse reddedilip bir sonraki adaya/kaynağa geçilir.
 `exclude_kind` verilirse (önceki sahneyle aynı tür olmasın diye), o türün önceliği
 düşürülür - yine de başka kaynak bulunamazsa aynı tür kullanılabilir.
 """
@@ -11,12 +13,15 @@ from pathlib import Path
 
 import requests
 
+from . import relevance
+
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 PIXABAY_API_KEY = os.environ.get("PIXABAY_API_KEY")
 
 _TIMEOUT = 15
 _PER_PAGE = 6
 _MIN_VIDEO_WIDTH = 480
+_MAX_CANDIDATES_PER_SOURCE = 3
 
 
 def _download(url: str, dest: Path) -> Path:
@@ -29,11 +34,11 @@ def _download(url: str, dest: Path) -> Path:
     return dest
 
 
-def _pexels_video(query: str) -> str | None:
-    """Sonuç kümesindeki TÜM videoların TÜM dosya varyantları arasından en yüksek
-    çözünürlüklü (width*height) olanı seçer."""
+def _pexels_video_candidates(query: str) -> list[str]:
+    """Her sonucun en yüksek çözünürlüklü dosya varyantını alır, sonuçları
+    çözünürlüğe göre azalan sırada döner."""
     if not PEXELS_API_KEY:
-        return None
+        return []
     resp = requests.get(
         "https://api.pexels.com/videos/search",
         headers={"Authorization": PEXELS_API_KEY},
@@ -41,28 +46,28 @@ def _pexels_video(query: str) -> str | None:
         timeout=_TIMEOUT,
     )
     if resp.status_code != 200:
-        return None
+        return []
     videos = resp.json().get("videos") or []
 
-    best_url = None
-    best_area = -1
+    candidates = []
     for video in videos:
+        best_url, best_area = None, -1
         for f in video.get("video_files", []):
             width, height = f.get("width") or 0, f.get("height") or 0
             if width < _MIN_VIDEO_WIDTH:
                 continue
             area = width * height
             if area > best_area:
-                best_area = area
-                best_url = f.get("link")
-    return best_url
+                best_area, best_url = area, f.get("link")
+        if best_url:
+            candidates.append((best_area, best_url))
+    candidates.sort(key=lambda c: c[0], reverse=True)
+    return [url for _, url in candidates]
 
 
-def _pexels_photo(query: str) -> str | None:
-    """Dönen fotoğraflar arasından (orijinal boyutlarına göre) en yüksek çözünürlüklü
-    olanı seçer, ardından o fotoğrafın en büyük kaynak URL'sini döner."""
+def _pexels_photo_candidates(query: str) -> list[str]:
     if not PEXELS_API_KEY:
-        return None
+        return []
     resp = requests.get(
         "https://api.pexels.com/v1/search",
         headers={"Authorization": PEXELS_API_KEY},
@@ -70,94 +75,105 @@ def _pexels_photo(query: str) -> str | None:
         timeout=_TIMEOUT,
     )
     if resp.status_code != 200:
-        return None
+        return []
     photos = resp.json().get("photos") or []
-    if not photos:
-        return None
+    photos.sort(key=lambda p: (p.get("width") or 0) * (p.get("height") or 0), reverse=True)
 
-    best = max(photos, key=lambda p: (p.get("width") or 0) * (p.get("height") or 0))
-    src = best.get("src", {})
-    return src.get("original") or src.get("large2x") or src.get("portrait")
+    urls = []
+    for photo in photos:
+        src = photo.get("src", {})
+        url = src.get("original") or src.get("large2x") or src.get("portrait")
+        if url:
+            urls.append(url)
+    return urls
 
 
-def _pixabay_video(query: str) -> str | None:
+def _pixabay_video_candidates(query: str) -> list[str]:
     if not PIXABAY_API_KEY:
-        return None
+        return []
     resp = requests.get(
         "https://pixabay.com/api/videos/",
         params={"key": PIXABAY_API_KEY, "q": query, "per_page": _PER_PAGE},
         timeout=_TIMEOUT,
     )
     if resp.status_code != 200:
-        return None
+        return []
     hits = resp.json().get("hits") or []
 
-    best_url = None
-    best_area = -1
+    candidates = []
     for hit in hits:
+        best_url, best_area = None, -1
         for size in ("large", "medium", "small", "tiny"):
             variant = hit.get("videos", {}).get(size)
             if not variant:
                 continue
             area = (variant.get("width") or 0) * (variant.get("height") or 0)
             if area > best_area:
-                best_area = area
-                best_url = variant.get("url")
-    return best_url
+                best_area, best_url = area, variant.get("url")
+        if best_url:
+            candidates.append((best_area, best_url))
+    candidates.sort(key=lambda c: c[0], reverse=True)
+    return [url for _, url in candidates]
 
 
-def _pixabay_photo(query: str) -> str | None:
+def _pixabay_photo_candidates(query: str) -> list[str]:
     if not PIXABAY_API_KEY:
-        return None
+        return []
     resp = requests.get(
         "https://pixabay.com/api/",
         params={"key": PIXABAY_API_KEY, "q": query, "image_type": "photo", "per_page": _PER_PAGE},
         timeout=_TIMEOUT,
     )
     if resp.status_code != 200:
-        return None
+        return []
     hits = resp.json().get("hits") or []
-    if not hits:
-        return None
-
-    best = max(hits, key=lambda h: (h.get("imageWidth") or 0) * (h.get("imageHeight") or 0))
-    return best.get("largeImageURL") or best.get("webformatURL")
+    hits.sort(key=lambda h: (h.get("imageWidth") or 0) * (h.get("imageHeight") or 0), reverse=True)
+    return [
+        h.get("largeImageURL") or h.get("webformatURL")
+        for h in hits
+        if h.get("largeImageURL") or h.get("webformatURL")
+    ]
 
 
 _VIDEO_FIRST = [
-    (_pexels_video, "video", "mp4"),
-    (_pexels_photo, "photo", "jpg"),
-    (_pixabay_video, "video", "mp4"),
-    (_pixabay_photo, "photo", "jpg"),
+    (_pexels_video_candidates, "video", "mp4"),
+    (_pexels_photo_candidates, "photo", "jpg"),
+    (_pixabay_video_candidates, "video", "mp4"),
+    (_pixabay_photo_candidates, "photo", "jpg"),
 ]
 _PHOTO_FIRST = [
-    (_pexels_photo, "photo", "jpg"),
-    (_pixabay_photo, "photo", "jpg"),
-    (_pexels_video, "video", "mp4"),
-    (_pixabay_video, "video", "mp4"),
+    (_pexels_photo_candidates, "photo", "jpg"),
+    (_pixabay_photo_candidates, "photo", "jpg"),
+    (_pexels_video_candidates, "video", "mp4"),
+    (_pixabay_video_candidates, "video", "mp4"),
 ]
 
 
-def fetch_clip(query: str, dest_dir: Path, index: int, exclude_kind: str | None = None) -> dict | None:
-    """query için klip arar. exclude_kind ("video"/"photo") verilirse -bir önceki sahneyle
-    aynı türden olmasın diye- o türün denenme sırası sona atılır (görsel çeşitliliği için);
-    yine de başka hiçbir kaynak yoksa aynı tür kullanılır (video bulunamamasındansa yeğdir).
+def fetch_clip(
+    query: str, note: str, dest_dir: Path, index: int, exclude_kind: str | None = None
+) -> dict | None:
+    """query için klip arar. Her kaynaktan en fazla `_MAX_CANDIDATES_PER_SOURCE` aday
+    indirilip relevance.is_relevant() ile kontrol edilir; ilk alakalı bulunan kullanılır,
+    reddedilenler diskten silinir. exclude_kind ("video"/"photo") verilirse önceki
+    sahneyle aynı türden olmasın diye o türün denenme sırası sona atılır.
 
-    Bulunursa {"path": Path, "kind": "video"|"photo"} döner, hiçbiri bulunamazsa None
-    (çağıran taraf bu durumda bir placeholder sahne üretmeli)."""
+    Bulunursa {"path": Path, "kind": "video"|"photo"} döner, hiçbiri bulunamaz/alakalı
+    çıkmazsa None (çağıran taraf bu durumda bir placeholder sahne üretmeli)."""
     attempts = _PHOTO_FIRST if exclude_kind == "video" else _VIDEO_FIRST
 
     for finder, kind, ext in attempts:
         try:
-            url = finder(query)
+            candidates = finder(query)
         except requests.RequestException:
             continue
-        if not url:
-            continue
-        dest = dest_dir / f"src_{index:02d}.{ext}"
-        try:
-            _download(url, dest)
-        except requests.RequestException:
-            continue
-        return {"path": dest, "kind": kind}
+
+        for candidate_url in candidates[:_MAX_CANDIDATES_PER_SOURCE]:
+            dest = dest_dir / f"src_{index:02d}_{kind}.{ext}"
+            try:
+                _download(candidate_url, dest)
+            except requests.RequestException:
+                continue
+            if relevance.is_relevant(dest, kind, query, note):
+                return {"path": dest, "kind": kind}
+            dest.unlink(missing_ok=True)
     return None

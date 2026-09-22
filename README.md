@@ -52,20 +52,29 @@ video.mp4 (aynı klasörde)
   çalışmadan sonra repoya commit edilir.
 - **Video oluşturma** (`build_video.py`, `src/video_builder.py`): script.json +
   audio.mp3'ten dikey (1080x1920) .mp4 üretir.
-  - Her sahne için `src/keywords.py` Gemini ile spesifik/sinematik bir
-    İngilizce arama sorgusu üretir (ör. "empty corporate office dramatic
-    lighting"); twist sahneleri kırmızı/kriz temalı modifiyerlerle güçlendirilir.
+  - Her sahne için `src/keywords.py` Gemini ile spesifik/somut bir İngilizce
+    arama sorgusu üretir (ör. "Nokia vintage cellphone factory 1990s" - jenerik
+    "corporate office"/"business handshake" gibi klişeler yasak). Konunun
+    şirket adı ve özeti (`company`/`topic_context`, script.json'a `run.py`
+    tarafından yazılır) modele çapa verir ve sorguya koddan da garanti edilir
+    (Gemini es geçse bile şirket adı sorguya eklenir); twist sahneleri ayrıca
+    kırmızı/kriz temalı modifiyerlerle güçlendirilir.
   - `src/stock_media.py` sırayla Pexels video → Pexels foto → Pixabay video →
-    Pixabay foto dener, her aramada dönen sonuçlar arasından **en yüksek
-    çözünürlüklü** dosyayı seçer; art arda iki sahne aynı türde (ikisi de
-    foto/video) olmasın diye önceki sahnenin türü bir sonrakinde dışlanır.
-    Hiçbir kaynak bulunamazsa düz renkli bir placeholder sahne kullanılır
-    (pipeline hiçbir zaman tamamen durmaz).
+    Pixabay foto dener, her kaynaktan (en yüksek çözünürlüklüden başlayarak)
+    birden fazla aday indirir; `src/relevance.py` her adayı Gemini vision ile
+    "bu görsel gerçekten bu sahneyle/şirketle ilgili mi" diye kontrol eder,
+    ilk alakalı bulunan kullanılır (Gemini yoksa bu filtre devre dışı kalır,
+    ilk aday kullanılır). Art arda iki sahne aynı türde (ikisi de foto/video)
+    olmasın diye önceki sahnenin türü bir sonrakinde dışlanır. Hiçbir uygun
+    kaynak bulunamazsa düz renkli bir placeholder sahne kullanılır (pipeline
+    hiçbir zaman tamamen durmaz).
   - Sahneler ses süresine eşit paylaştırılır, ffmpeg ile art arda eklenir.
   - Altyazı `word_timings.json` varsa gerçek kelime zamanlamasıyla, yoksa
-    `src/subtitles.py`'nin tahmini kelime dağıtımıyla üretilir - **kelime
-    kelime** görünen, kalın/büyük, dinamik bir stille gömülür (statik cümle
-    bloğu değil).
+    `src/subtitles.py`'nin tahmini kelime dağıtımıyla üretilir - kelimeler
+    tek tek EKLENEREK birikir (ör. "Nokia," → "Nokia, cebinde" → "Nokia,
+    cebinde taşıdığımız...", cümle sonunda ya da 6 kelimede bir sıfırlanır),
+    kalın/büyük, dinamik bir stille gömülür (statik tam cümle bloğu ya da
+    tek kelime değil).
 
 ## Kurulum (local test)
 

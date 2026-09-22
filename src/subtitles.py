@@ -1,15 +1,17 @@
 """Seslendirme metninden/zaman kodlarından dikey video için altyazı (.srt) üretir.
 
-İki mod var:
-- build_word_srt: ElevenLabs'in "with-timestamps" endpoint'inden gelen gerçek kelime
-  zaman kodlarını kullanır (hassas, kelime kelime senkronize).
-- estimate_word_timings + build_word_srt: gerçek zaman kodu yoksa (ör. dry-run, ya da
-  ElevenLabs timestamp endpoint'i kullanılamadıysa), metni ses süresine kelime uzunluğuna
-  orantılı olarak dağıtan bir tahmin üretir. Yine kelime-kelime görünür, sadece zamanlama
-  daha az hassastır.
+- estimate_word_timings: gerçek zaman kodu yoksa (ör. dry-run, ya da ElevenLabs
+  timestamp endpoint'i kullanılamadıysa), metni ses süresine kelime uzunluğuna
+  orantılı olarak dağıtan bir tahmin üretir.
+- build_cumulative_srt: kelime bazlı zaman kodlarından (gerçek ya da tahmini),
+  o ana kadar birikmiş öbeği gösteren dinamik altyazı üretir
+  (ör. "Nokia," -> "Nokia, cebinde" -> "Nokia, cebinde taşıdığımız..."),
+  statik tam cümle bloğu ya da tek kelime yerine.
 """
 
 _MIN_WORD_SECONDS = 0.12
+_MAX_WORDS_PER_CHUNK = 6
+_SENTENCE_END_CHARS = (".", "!", "?", "…")
 
 
 def _format_timestamp(seconds: float) -> str:
@@ -47,12 +49,35 @@ def estimate_word_timings(text: str, duration: float) -> list[dict]:
     return entries
 
 
-def build_word_srt(word_timings: list[dict]) -> str:
-    """Kelime bazlı zaman kodlarından, her kelimenin kendi kısa cue'su olduğu, dinamik
-    "kelime kelime" tarzı bir .srt üretir (statik cümle bloğu yerine)."""
+def build_cumulative_srt(word_timings: list[dict]) -> str:
+    """Kelime bazlı zaman kodlarından, her yeni kelimede bir öncekinin üzerine eklenen
+    ("birikimli") dinamik bir .srt üretir: "Nokia," -> "Nokia, cebinde" -> "Nokia,
+    cebinde taşıdığımız...". Birikim, cümle sonunda (./!/?) ya da öbek
+    `_MAX_WORDS_PER_CHUNK` kelimeyi aşınca sıfırlanıp yeniden başlar (okunabilirlik
+    ve ekran genişliği için)."""
+    if not word_timings:
+        return ""
+
     entries = []
-    for i, w in enumerate(word_timings, start=1):
-        entries.append(
-            f"{i}\n{_format_timestamp(w['start'])} --> {_format_timestamp(w['end'])}\n{w['word']}\n"
-        )
+    index = 1
+    chunk: list[dict] = []
+
+    for i, w in enumerate(word_timings):
+        chunk.append(w)
+        is_last_overall = i == len(word_timings) - 1
+        next_start = word_timings[i + 1]["start"] if not is_last_overall else None
+
+        text = " ".join(item["word"] for item in chunk)
+        # Cue, bu kelimenin başlangıcından bir sonraki kelime eklenene (ya da
+        # cümle/öbek bitene) kadar birikmiş metni gösterir.
+        start = w["start"]
+        end = next_start if next_start is not None else w["end"]
+        entries.append(f"{index}\n{_format_timestamp(start)} --> {_format_timestamp(end)}\n{text}\n")
+        index += 1
+
+        ends_sentence = w["word"].rstrip().endswith(_SENTENCE_END_CHARS)
+        chunk_full = len(chunk) >= _MAX_WORDS_PER_CHUNK
+        if ends_sentence or chunk_full or is_last_overall:
+            chunk = []
+
     return "\n".join(entries)

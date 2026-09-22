@@ -2,17 +2,23 @@
 
 Adımlar:
 1. script.json'daki her sahne (hook/setup/twist bölümlerindeki visual_notes) için
-   Gemini ile spesifik/sinematik bir İngilizce arama sorgusu üretilir - twist
-   sahneleri dramatik/kriz temalı modifiyerlerle güçlendirilir. Pexels'ten (önce
-   video, sonra foto), bulunamazsa Pixabay'den en yüksek çözünürlüklü klip
-   indirilir; art arda iki sahne aynı türde (ikisi de foto/video) olmasın diye
-   önceki sahnenin türü bir sonrakinde dışlanır. Hiçbir kaynak bulunamazsa düz
-   renkli bir placeholder sahne kullanılır.
+   Gemini ile spesifik/somut bir İngilizce arama sorgusu üretilir; şirket adı
+   (`company`) ve konu özeti (`topic_context`) modele güçlü bir çapa verir ve
+   sorguya (Gemini es geçse bile) koddan garanti edilir - jenerik/ilgisiz
+   görselleri (ör. rastgele tokalaşma, alakasız fabrika) önlemek için. twist
+   sahneleri ayrıca dramatik/kriz temalı modifiyerlerle güçlendirilir.
+   Pexels'ten (önce video, sonra foto), bulunamazsa Pixabay'den birden fazla
+   aday indirilip src/relevance.py ile Gemini vision üzerinden konuyla
+   gerçekten alakalı mı diye kontrol edilir (en yüksek çözünürlüklü adaydan
+   başlanır); art arda iki sahne aynı türde (ikisi de foto/video) olmasın diye
+   önceki sahnenin türü bir sonrakinde dışlanır. Hiçbir uygun kaynak
+   bulunamazsa düz renkli bir placeholder sahne kullanılır.
 2. Her klip, ses süresine eşit paylaştırılmış bir segment uzunluğuna
    sığdırılıp 1080x1920'ye ölçeklenir/kırpılır.
 3. Segmentler art arda eklenir (concat), seslendirme ile birleştirilir, üzerine
-   kelime-kelime senkronize, büyük/kalın dinamik altyazı gömülür (ElevenLabs'in
-   ürettiği gerçek kelime zaman kodları varsa onlar, yoksa tahmini zamanlama).
+   kelime kelime BİRİKEREK büyüyen (statik cümle bloğu ya da tek kelime yerine),
+   büyük/kalın dinamik altyazı gömülür (ElevenLabs'in ürettiği gerçek kelime
+   zaman kodları varsa onlar, yoksa tahmini zamanlama).
 
 Eski (hook/setup/twist'ten önceki) düz `visual_notes` formatındaki script.json'lar
 da desteklenir - bkz. _extract_scenes.
@@ -151,7 +157,10 @@ def build_video(video_dir: Path, keep_assets: bool = False) -> Path:
             "script.json içinde görsel sahne bulunamadı (ne hook/setup/twist ne de "
             "visual_notes). Video oluşturma şu an sadece short senaryoları için destekleniyor."
         )
-    company_hint = data.get("title", "")
+    # Eski script.json'larda "company" alanı yoktur; bu durumda görsel başlığa düşülür
+    # (idealden az anlamlı olsa da company hiç olmamasından daha iyi).
+    company_hint = data.get("company") or data.get("title", "")
+    topic_context = data.get("topic_context", "")
 
     total_duration = _probe_duration(audio_path)
     segment_count = len(scenes)
@@ -165,10 +174,10 @@ def build_video(video_dir: Path, keep_assets: bool = False) -> Path:
     last_kind: str | None = None
     for i, scene in enumerate(scenes):
         note, dramatic = scene["note"], scene["dramatic"]
-        query = keywords.to_search_query(note, company=company_hint, dramatic=dramatic)
+        query = keywords.to_search_query(note, company=company_hint, context=topic_context, dramatic=dramatic)
         tag = " [DRAMATİK]" if dramatic else ""
         print(f"  [{i + 1}/{segment_count}]{tag} \"{note[:60]}\" -> arama: \"{query}\"")
-        clip = stock_media.fetch_clip(query, assets_dir, i, exclude_kind=last_kind)
+        clip = stock_media.fetch_clip(query, note, assets_dir, i, exclude_kind=last_kind)
         seg_path = assets_dir / f"seg_{i:02d}.mp4"
 
         if clip is None:
@@ -201,7 +210,7 @@ def build_video(video_dir: Path, keep_assets: bool = False) -> Path:
         word_timings = subtitles.estimate_word_timings(narration, total_duration)
 
     captions_path = video_dir / "captions.srt"
-    captions_path.write_text(subtitles.build_word_srt(word_timings), encoding="utf-8")
+    captions_path.write_text(subtitles.build_cumulative_srt(word_timings), encoding="utf-8")
 
     output_path = video_dir / "video.mp4"
     subtitle_arg = _ffmpeg_filter_path(captions_path)

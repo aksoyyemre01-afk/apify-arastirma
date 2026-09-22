@@ -101,6 +101,8 @@ def _write_short(topic: dict, script: ShortScript, out_dir: Path, do_tts: bool) 
 
     json_data = script.model_dump()
     json_data["narration_full"] = full_narration
+    json_data["company"] = topic.get("company", "")
+    json_data["topic_context"] = topic.get("angle", "")
     (video_dir / "script.json").write_text(
         json.dumps(json_data, ensure_ascii=False, indent=2), encoding="utf-8"
     )

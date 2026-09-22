@@ -32,40 +32,73 @@ def _get_client():
     return _client
 
 
-def to_search_query(note: str, company: str = "", dramatic: bool = False) -> str:
+def to_search_query(note: str, company: str = "", context: str = "", dramatic: bool = False) -> str:
     """Görsel notu (ör. '2000'lerden gerçek Blockbuster mağaza görüntüleri') stok medya
-    aramasına uygun, spesifik ve sinematik bir İngilizce sorguya çevirir.
-    dramatic=True ise (twist/kriz sahnesi) sonuca kırmızı/kriz temalı modifiyerler eklenir.
-    Gemini kullanılamazsa basit bir yedek sorgu döner (yine de dramatic ise modifiye edilir)."""
-    client = _get_client()
-    if client is not None:
-        try:
-            instruction = (
-                "Aşağıdaki video sahne açıklamasını, stok görsel/video sitesinde (Pexels/Pixabay) "
-                "arama yapmak için 4-6 kelimelik SPESİFİK ve SİNEMATİK bir İngilizce arama sorgusuna "
-                "çevir. Genel kelimeler yerine somut, görsel olarak çarpıcı tanımlayıcılar kullan "
-                "(ör. 'office' yerine 'empty corporate office dramatic lighting'). "
-            )
-            if dramatic:
-                instruction += (
-                    "Bu sahne senaryonun EN DRAMATİK/kriz anı: kırmızı tonlar, alarm, çöküş, kaos "
-                    "hissi veren spesifik görsel öğeler ekle. "
-                )
-            instruction += (
-                "Sadece anahtar kelimeleri yaz, başka açıklama, tırnak veya noktalama ekleme.\n\n"
-                f"Sahne: {note}"
-            )
-            response = client.models.generate_content(model=MODEL, contents=instruction)
-            text = (response.text or "").strip().strip('"').strip()
-            if text:
-                if dramatic:
-                    text = f"{text} {random.choice(DRAMATIC_MODIFIERS)}"
-                return text
-        except Exception:
-            pass
+    aramasına uygun, spesifik/somut ve sinematik bir İngilizce sorguya çevirir.
 
-    fallback = (company or "").strip() or "business"
-    query = f"{fallback} corporate office cinematic"
+    company (ör. 'Nokia') ve context (konunun tek cümlelik özeti) modele güçlü bir
+    konu çapası verir - bu sayede jenerik/ilgisiz görseller yerine (ör. rastgele
+    tokalaşma, alakasız fabrika) konuyla gerçekten ilgili terimler üretilir. company
+    sonuç sorgusunda mutlaka geçer (Gemini es geçse bile koddan garanti edilir).
+
+    dramatic=True ise (twist/kriz sahnesi) sonuca kırmızı/kriz temalı modifiyerler
+    eklenir. Gemini kullanılamazsa basit ama yine de company'ye çapalı bir yedek
+    sorgu döner."""
+    company = (company or "").strip()
+    query = _generate(note, company, context, dramatic) or _fallback(company, dramatic)
+
+    if company and company.lower() not in query.lower():
+        query = f"{company} {query}"
     if dramatic:
         query = f"{query} {random.choice(DRAMATIC_MODIFIERS)}"
     return query
+
+
+def _generate(note: str, company: str, context: str, dramatic: bool) -> str | None:
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        instruction = (
+            "Aşağıdaki video sahne açıklamasını, stok görsel/video sitesinde (Pexels/Pixabay) "
+            "arama yapmak için 4-6 kelimelik SPESİFİK ve SOMUT bir İngilizce arama sorgusuna "
+            "çevir.\n\n"
+        )
+        if company:
+            instruction += f"İlgili şirket/konu: {company}\n"
+        if context:
+            instruction += f"Konu özeti: {context}\n"
+        instruction += (
+            "\nKurallar:\n"
+            "- Sorgu MUTLAKA bu şirketin sektörünü/ürününü somut olarak belirtmeli "
+            "(ör. şirket bir telefon üreticisiyse 'mobile phone'/'cellphone', bir hava "
+            "yolu ise 'airplane', bir banka ise 'bank building', bir perakende zinciriyse "
+            "'retail store'). Şirket eski bir döneme aitse 'vintage'/'retro'/'old' gibi "
+            "dönem belirteçleri ekle.\n"
+            "- Genel/jenerik iş dünyası klişeleri KULLANMA (ör. 'business handshake', "
+            "'corporate office', 'people shaking hands', 'generic factory') - bunlar "
+            "konuyla alakasız görsellere yol açıyor.\n"
+            "- Genel kelimeler yerine somut, görsel olarak çarpıcı tanımlayıcılar kullan.\n"
+        )
+        if dramatic:
+            instruction += (
+                "- Bu sahne senaryonun EN DRAMATİK/kriz anı: kırmızı tonlar, alarm, çöküş, "
+                "kaos hissi veren spesifik görsel öğeler ekle (yine şirketin ürünü/sektörüyle "
+                "ilişkili olarak, ör. 'broken smartphone screen red light' gibi).\n"
+            )
+        instruction += (
+            "- Sadece anahtar kelimeleri yaz, başka açıklama, tırnak veya noktalama ekleme.\n\n"
+            f"Sahne: {note}"
+        )
+        response = client.models.generate_content(model=MODEL, contents=instruction)
+        text = (response.text or "").strip().strip('"').strip()
+        return text or None
+    except Exception:
+        return None
+
+
+def _fallback(company: str, dramatic: bool) -> str:
+    base = company if company else "business"
+    if dramatic:
+        return f"{base} crisis"
+    return f"{base} product closeup"
