@@ -177,7 +177,9 @@ def build_video(video_dir: Path, keep_assets: bool = False) -> Path:
         query = keywords.to_search_query(note, company=company_hint, context=topic_context, dramatic=dramatic)
         tag = " [DRAMATİK]" if dramatic else ""
         print(f"  [{i + 1}/{segment_count}]{tag} \"{note[:60]}\" -> arama: \"{query}\"")
-        clip = stock_media.fetch_clip(query, note, assets_dir, i, exclude_kind=last_kind)
+        clip = stock_media.fetch_clip(
+            query, note, assets_dir, i, exclude_kind=last_kind, company=company_hint
+        )
         seg_path = assets_dir / f"seg_{i:02d}.mp4"
 
         if clip is None:

@@ -150,12 +150,18 @@ _PHOTO_FIRST = [
 
 
 def fetch_clip(
-    query: str, note: str, dest_dir: Path, index: int, exclude_kind: str | None = None
+    query: str,
+    note: str,
+    dest_dir: Path,
+    index: int,
+    exclude_kind: str | None = None,
+    company: str = "",
 ) -> dict | None:
     """query için klip arar. Her kaynaktan en fazla `_MAX_CANDIDATES_PER_SOURCE` aday
     indirilip relevance.is_relevant() ile kontrol edilir; ilk alakalı bulunan kullanılır,
     reddedilenler diskten silinir. exclude_kind ("video"/"photo") verilirse önceki
-    sahneyle aynı türden olmasın diye o türün denenme sırası sona atılır.
+    sahneyle aynı türden olmasın diye o türün denenme sırası sona atılır. company,
+    alaka kontrolüne ayrı bir alan olarak geçilir (bkz. relevance.is_relevant).
 
     Bulunursa {"path": Path, "kind": "video"|"photo"} döner, hiçbiri bulunamaz/alakalı
     çıkmazsa None (çağıran taraf bu durumda bir placeholder sahne üretmeli)."""
@@ -173,7 +179,7 @@ def fetch_clip(
                 _download(candidate_url, dest)
             except requests.RequestException:
                 continue
-            if relevance.is_relevant(dest, kind, query, note):
+            if relevance.is_relevant(dest, kind, query, note, company=company):
                 return {"path": dest, "kind": kind}
             dest.unlink(missing_ok=True)
     return None

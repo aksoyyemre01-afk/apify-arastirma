@@ -233,3 +233,14 @@ Repo → Settings → Secrets and variables → Actions → **Secrets**:
   daha az hassas senkronla).
 - Placeholder sahnelerde (stok klip bulunamadığında) `to_search_query`
   Gemini çağrısı yine de yapılır; sadece stok medya sonucu boş döner.
+- `to_search_query` şirket adını sorguya her zaman garanti eder, ama tek başına
+  bu yeterli olmayabilir: Türkçe'den birebir çevrilen çok anlamlı kelimeler
+  (ör. "kepenk" -> "shutter") stok arama motorunda ve hatta Gemini vision
+  alaka kontrolünde jenerik/alakasız sonuçlarla eşleşebilir (ör. bambaşka bir
+  markanın benzin istasyonu) - çünkü görsel, markaya özgü hiçbir işaret
+  taşımadığından "kelimeyle eşleşiyor" görünebilir. Bu yüzden prompt artık
+  böyle belirsiz tek kelimelik çevirilerden kaçınmayı ve en az 2 somut
+  tanımlayıcı kullanmayı istiyor, `relevance.py`'nin kontrolü de şirket adını
+  ayrı bir alan olarak alıp emin olmadığında reddetmeye (HAYIR) daha yatkın.
+  Yine de mükemmel değildir - tamamen alakasız bir sonuç görürsen, o script.json
+  içindeki ilgili `visual_notes` maddesini elle netleştirmek en garanti çözümdür.

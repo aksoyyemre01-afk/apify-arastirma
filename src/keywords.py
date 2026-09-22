@@ -78,6 +78,16 @@ def _generate(note: str, company: str, context: str, dramatic: bool) -> str | No
             "- Genel/jenerik iş dünyası klişeleri KULLANMA (ör. 'business handshake', "
             "'corporate office', 'people shaking hands', 'generic factory') - bunlar "
             "konuyla alakasız görsellere yol açıyor.\n"
+            "- Türkçe'den birebir çevrildiğinde İngilizce'de ÇOK ANLAMLI/BELİRSİZ olan "
+            "kelimelerden kaçın (ör. 'kepenk' -> 'shutter' YAZMA; 'shutter' İngilizce'de "
+            "hem kamera obtüratörü hem rastgele bir dükkan/istasyon kepenği anlamına gelir "
+            "ve şirketle hiç alakasız bir görsel getirebilir). Bunun yerine sahneyi somut ve "
+            "tek anlamlı şekilde tarif et (ör. 'kapanan kepenk' yerine 'abandoned closed "
+            "factory building dusk' gibi, kelimenin kendisini değil SAHNEYİ çevir).\n"
+            "- Sorgudaki her kelimenin, şirketin kendisi dışında başka hiçbir bağlamda "
+            "(farklı bir marka, sektör, rastgele bir yer) da eşleşebilecek tek bir jenerik "
+            "kelime OLMAMASINA dikkat et; en az 2 spesifik/somut tanımlayıcıyı bir arada "
+            "kullan ki arama sonucu yanlış bağlama kaymasın.\n"
             "- Genel kelimeler yerine somut, görsel olarak çarpıcı tanımlayıcılar kullan.\n"
         )
         if dramatic:
