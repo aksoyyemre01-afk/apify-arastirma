@@ -41,7 +41,12 @@ video.mp4 (aynı klasörde)
   **setup** (kuruluş/bağlam, 2 sahne), **twist** (senaryonun en dramatik anı,
   2 sahne - görselleri kasıtlı olarak kriz/kontrast temalı istenir). Her
   bölümün kendi `narration` + `visual_notes`'u var; `cta` ayrı, seslendirilmeyen
-  bir kapanış metnidir.
+  bir kapanış metnidir. Her iki prompt'a (short + long) `NARRATION_STYLE_RULES`
+  eklenir: Türkçe sesteş/yazılışı belirsiz kelimelerden (kar/kâr, adet/âdet)
+  doğru aksanla yazmasını ya da kaçınmasını, kısa/konuşma diline yakın cümleler
+  kurmasını ve TTS'in doğal okuyamayacağı yapılardan (uzun iç içe cümleler,
+  nadir/yabancı terimler) kaçınmasını ister - amaç seslendirmenin robotik değil
+  bir insan sunucu gibi doğal akması.
 - **Seslendirme** (`src/tts.py`): `synthesize_with_timestamps()` ElevenLabs'in
   karakter bazlı zaman kodlarını kelime bazlı zamanlamaya indirger
   (`word_timings.json` olarak kaydedilir) - bu, altyazıların gerçek kelime
