@@ -4,8 +4,11 @@
 Enron, FTX vb.) araştırıp bunlardan otomatik olarak YouTube video senaryoları
 üreten bir içerik hattı.
 
-**Haftalık çıktı:** 3 adet YouTube Shorts (30-45 sn) + 1 adet uzun video (~5 dk),
-senaryo metni + ElevenLabs ile seslendirme (mp3).
+**Haftalık çıktı:** Her hafta seçilen TEK bir konu 3 bölümlük bir seriye bölünür
+(Pazartesi: giriş/kuruluş, Çarşamba: zirve/kritik hata, Cuma: çöküş/sonuç) ve
+hafta sonu bu 3 bölümü sentezleyen 1 uzun özet video (~5 dk) üretilir — senaryo
+metni + ElevenLabs ile seslendirme (mp3). Üretim kuralları (görsel alaka, marka
+tutarlılığı, tempo vb.) için bkz. **[RULES.md](RULES.md)**.
 
 ## Nasıl çalışır
 

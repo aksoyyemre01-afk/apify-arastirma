@@ -1,11 +1,17 @@
 """Business Stories otomasyonu - ana çalıştırma script'i.
 
+RULES.md kural 8'i uygular: --mode weekly artık TEK bir konuyu 3 short'a böler
+(Pazartesi: giriş/kuruluş, Çarşamba: zirve/kritik hata, Cuma: çöküş/sonuç) ve
+hafta sonu bu 3 bölümü sentezleyen 1 uzun video üretir - 4 farklı konu değil.
+--mode shorts / --mode long, ad-hoc/tekil test çalıştırmaları için eskisi gibi
+bağımsız konularla çalışmaya devam eder.
+
 Kullanım:
-    python run.py --mode weekly              # 3 short + 1 uzun video üretir (gerçek API çağrılarıyla)
-    python run.py --mode shorts               # sadece short'lar
-    python run.py --mode long                 # sadece uzun video
+    python run.py --mode weekly               # haftalık 3+1 seri üretir (gerçek API çağrılarıyla)
     python run.py --mode weekly --dry-run      # API çağrısı yapmadan, sahte içerikle boru hattını test eder
     python run.py --mode weekly --skip-tts     # senaryoları üretir ama ElevenLabs ile seslendirme yapmaz
+    python run.py --mode shorts --shorts-count 1   # ad-hoc: tek, bağımsız bir short üret (test için)
+    python run.py --mode long                 # ad-hoc: bağımsız bir uzun video üret
 """
 
 import argparse
@@ -67,8 +73,8 @@ _BEAT_LABELS = {
 }
 
 
-def _write_short(topic: dict, script: ShortScript, out_dir: Path, do_tts: bool) -> Path:
-    video_dir = out_dir / f"short-{slugify(script.title)}"
+def _write_short(topic: dict, script: ShortScript, out_dir: Path, do_tts: bool, prefix: str = "") -> Path:
+    video_dir = out_dir / f"short-{prefix}{slugify(script.title)}"
     video_dir.mkdir(parents=True, exist_ok=True)
 
     beats = [("hook", script.hook), ("setup", script.setup), ("twist", script.twist)]
@@ -119,8 +125,8 @@ def _write_short(topic: dict, script: ShortScript, out_dir: Path, do_tts: bool) 
     return video_dir
 
 
-def _write_long(topic: dict, script: LongScript, out_dir: Path, do_tts: bool) -> Path:
-    video_dir = out_dir / f"long-{slugify(script.title)}"
+def _write_long(topic: dict, script: LongScript, out_dir: Path, do_tts: bool, prefix: str = "") -> Path:
+    video_dir = out_dir / f"long-{prefix}{slugify(script.title)}"
     video_dir.mkdir(parents=True, exist_ok=True)
 
     md_lines = [
@@ -150,15 +156,93 @@ def _write_long(topic: dict, script: LongScript, out_dir: Path, do_tts: bool) ->
     return video_dir
 
 
-def run(mode: str, shorts_count: int, long_count: int, do_tts: bool, dry_run: bool) -> None:
+def _dry_run_weekly_part(topic: dict, part_index: int) -> ShortScript:
+    from src.script_writer import WEEKLY_PARTS
+
+    part = WEEKLY_PARTS[part_index]
+    return ShortScript(
+        title=f"[DRY RUN] {topic['title']} - {part['focus_title']}",
+        hook=ShortBeat(
+            narration=f"[DRY RUN] {part['day_label']} bölümü açılışı.",
+            visual_notes=[f"[DRY RUN] {topic.get('company', '')} logo"],
+        ),
+        setup=ShortBeat(
+            narration=f"[DRY RUN] {part['focus']}",
+            visual_notes=["[DRY RUN] kuruluş sahnesi 1", "[DRY RUN] kuruluş sahnesi 2"],
+        ),
+        twist=ShortBeat(
+            narration="[DRY RUN] Örnek dönüm noktası metni.",
+            visual_notes=["[DRY RUN] somut sahne 1", "[DRY RUN] somut sahne 2"],
+        ),
+        cta=f"[DRY RUN] {part['cliffhanger']}",
+        hashtags=["#dryrun", "#test"],
+    )
+
+
+# RULES.md kural 8: her hafta seçilen TEK konu 3 short'a bölünür (Pzt/Çrş/Cuma:
+# giriş-kuruluş / zirve-hata / çöküş-sonuç), hafta sonu bu 3'ünü sentezleyen 1
+# uzun video üretilir. 4 farklı konu değil, TEK konunun 4 parçası.
+def run_weekly_arc(do_tts: bool, dry_run: bool) -> None:
+    used = state.get_used_ids()
+    topics = research.get_topics(1, used)
+    if not topics:
+        print("UYARI: haftalık seri için konu bulunamadı.")
+        return
+    topic = topics[0]
+
+    out_dir = OUTPUT_DIR / date.today().isoformat()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    from src.script_writer import WEEKLY_PARTS
+
+    print(f"Haftalık seri konusu: {topic['title']} ({topic.get('company', '')})")
+
+    results = []
+    part_narrations: list[str] = []
+    for part_index in (1, 2, 3):
+        day_label = WEEKLY_PARTS[part_index]["day_label"]
+        if dry_run:
+            script = _dry_run_weekly_part(topic, part_index)
+        else:
+            from src import script_writer
+
+            script = script_writer.write_weekly_part_script(topic, part_index, part_narrations)
+        beats = [("hook", script.hook), ("setup", script.setup), ("twist", script.twist)]
+        part_narrations.append(" ".join(beat.narration for _, beat in beats))
+        path = _write_short(
+            topic, script, out_dir, do_tts and not dry_run,
+            prefix=f"{part_index}-{slugify(day_label)}-",
+        )
+        results.append(str(path))
+
+    if dry_run:
+        long_script = _dry_run_long(topic)
+    else:
+        from src import script_writer
+
+        long_script = script_writer.write_weekly_recap_script(topic, part_narrations)
+    long_path = _write_long(
+        topic, long_script, out_dir, do_tts and not dry_run, prefix="hafta-sonu-ozet-"
+    )
+    results.append(str(long_path))
+
+    if not dry_run:
+        state.mark_used(topic["id"], "weekly-arc")
+        state.save()
+
+    print(f"\nÜretildi: {len(results)} içerik (3 short + 1 özet uzun video) -> {out_dir}")
+    for r in results:
+        print(" -", r)
+    if dry_run:
+        print("\n(dry-run modunda: gerçek API çağrısı yapılmadı, state güncellenmedi)")
+
+
+# --mode shorts / --mode long: ad-hoc/tekil test çalıştırmaları, her biri kendi
+# bağımsız konusuyla (haftalık seri akışının dışında, hızlı test için).
+def run_adhoc(mode: str, shorts_count: int, long_count: int, do_tts: bool, dry_run: bool) -> None:
     used = state.get_used_ids()
 
-    needed = 0
-    if mode in ("shorts", "weekly"):
-        needed += shorts_count
-    if mode in ("long", "weekly"):
-        needed += long_count
-
+    needed = shorts_count if mode == "shorts" else long_count
     topics = research.get_topics(needed, used)
     if len(topics) < needed:
         print(f"UYARI: {needed} konu istendi ama sadece {len(topics)} tane bulunabildi.")
@@ -166,13 +250,10 @@ def run(mode: str, shorts_count: int, long_count: int, do_tts: bool, dry_run: bo
     out_dir = OUTPUT_DIR / date.today().isoformat()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    idx = 0
     results = []
 
-    if mode in ("shorts", "weekly"):
-        for _ in range(min(shorts_count, max(0, len(topics) - idx))):
-            topic = topics[idx]
-            idx += 1
+    if mode == "shorts":
+        for topic in topics:
             if dry_run:
                 script = _dry_run_short(topic)
             else:
@@ -184,10 +265,8 @@ def run(mode: str, shorts_count: int, long_count: int, do_tts: bool, dry_run: bo
                 state.mark_used(topic["id"], "short")
             results.append(str(path))
 
-    if mode in ("long", "weekly"):
-        for _ in range(min(long_count, max(0, len(topics) - idx))):
-            topic = topics[idx]
-            idx += 1
+    if mode == "long":
+        for topic in topics:
             if dry_run:
                 script = _dry_run_long(topic)
             else:
@@ -213,10 +292,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Business Stories içerik otomasyonu")
     parser.add_argument("--mode", choices=["shorts", "long", "weekly"], default="weekly")
     parser.add_argument(
-        "--shorts-count", type=int, default=int(os.environ.get("SHORTS_PER_WEEK", 3))
+        "--shorts-count",
+        type=int,
+        default=int(os.environ.get("SHORTS_PER_WEEK", 3)),
+        help="Sadece --mode shorts için (ad-hoc test)",
     )
     parser.add_argument(
-        "--long-count", type=int, default=int(os.environ.get("LONG_PER_WEEK", 1))
+        "--long-count",
+        type=int,
+        default=int(os.environ.get("LONG_PER_WEEK", 1)),
+        help="Sadece --mode long için (ad-hoc test)",
     )
     parser.add_argument("--skip-tts", action="store_true", help="ElevenLabs çağrısını atla")
     parser.add_argument(
@@ -226,10 +311,13 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    run(
-        mode=args.mode,
-        shorts_count=args.shorts_count,
-        long_count=args.long_count,
-        do_tts=not args.skip_tts,
-        dry_run=args.dry_run,
-    )
+    if args.mode == "weekly":
+        run_weekly_arc(do_tts=not args.skip_tts, dry_run=args.dry_run)
+    else:
+        run_adhoc(
+            mode=args.mode,
+            shorts_count=args.shorts_count,
+            long_count=args.long_count,
+            do_tts=not args.skip_tts,
+            dry_run=args.dry_run,
+        )

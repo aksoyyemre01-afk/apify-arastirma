@@ -1,24 +1,23 @@
 """script.json + audio.mp3'ten ffmpeg ile dikey (9:16) YouTube Shorts videosu üretir.
 
-Adımlar:
-1. script.json'daki her sahne (hook/setup/twist bölümlerindeki visual_notes) için
-   Gemini ile spesifik/somut bir İngilizce arama sorgusu üretilir; şirket adı
-   (`company`) ve konu özeti (`topic_context`) modele güçlü bir çapa verir ve
-   sorguya (Gemini es geçse bile) koddan garanti edilir - jenerik/ilgisiz
-   görselleri (ör. rastgele tokalaşma, alakasız fabrika) önlemek için. twist
-   sahneleri ayrıca dramatik/kriz temalı modifiyerlerle güçlendirilir.
-   Pexels'ten (önce video, sonra foto), bulunamazsa Pixabay'den birden fazla
-   aday indirilip src/relevance.py ile Gemini vision üzerinden konuyla
-   gerçekten alakalı mı diye kontrol edilir (en yüksek çözünürlüklü adaydan
-   başlanır); art arda iki sahne aynı türde (ikisi de foto/video) olmasın diye
-   önceki sahnenin türü bir sonrakinde dışlanır. Hiçbir uygun kaynak
-   bulunamazsa düz renkli bir placeholder sahne kullanılır.
-2. Her klip, ses süresine eşit paylaştırılmış bir segment uzunluğuna
-   sığdırılıp 1080x1920'ye ölçeklenir/kırpılır.
+RULES.md'deki kuralları uygular (özellikle 1, 4, 5, 6, 7, 11, 14):
+1. Her sahne için src/keywords.py, şirket adıyla BAŞLAYAN, somut/gösterilebilir bir
+   İngilizce arama sorgusu üretir (kural 1, 5). İlk sahne, script'in kendi notundan
+   bağımsız olarak `"{company} logo"` aramasına zorlanır - marka en az bir sahnede
+   garanti görünür (kural 4). Pexels'ten (önce video, sonra foto), bulunamazsa
+   Pixabay'den birden fazla aday toplanır; her aday önce ucuz bir etiket/keyword
+   ön filtresinden, sonra src/relevance.py ile Gemini vision kontrolünden geçer
+   (kural 6). Aynı videoda aynı URL bir daha kullanılmaz, art arda iki sahne aynı
+   türde (foto/video) olmaz (kural 7). Hiçbir aday geçemezse son çare olarak
+   `"{company} logo"` denenir, o da bulunamazsa placeholder sahne kullanılır -
+   tamamen kopuk bir görsel asla kullanılmaz.
+2. Hiçbir sahne 4 saniyeden uzun ekranda kalmaz (kural 11) - sahne süresi bunu
+   aşarsa aynı notu paylaşan alt-kesimlere bölünür. Her klip, segment uzunluğuna
+   sığdırılıp 1080x1920'ye ölçeklenir/kırpılır (ortalanmış kırpma, kural 10).
 3. Segmentler art arda eklenir (concat), seslendirme ile birleştirilir, üzerine
    kelime kelime BİRİKEREK büyüyen (statik cümle bloğu ya da tek kelime yerine),
-   büyük/kalın dinamik altyazı gömülür (ElevenLabs'in ürettiği gerçek kelime
-   zaman kodları varsa onlar, yoksa tahmini zamanlama).
+   büyük/kalın dinamik altyazı gömülür (kural 14) (ElevenLabs'in ürettiği gerçek
+   kelime zaman kodları varsa onlar, yoksa tahmini zamanlama).
 
 Eski (hook/setup/twist'ten önceki) düz `visual_notes` formatındaki script.json'lar
 da desteklenir - bkz. _extract_scenes.
@@ -27,6 +26,7 @@ da desteklenir - bkz. _extract_scenes.
 import json
 import shutil
 import subprocess
+from math import ceil
 from pathlib import Path
 
 from . import keywords, stock_media, subtitles
@@ -34,6 +34,9 @@ from . import keywords, stock_media, subtitles
 WIDTH = 1080
 HEIGHT = 1920
 FPS = 25
+
+# RULES.md kural 11: hiçbir görsel 4 saniyeden uzun ekranda kalmaz.
+MAX_SCENE_SECONDS = 4.0
 
 PLACEHOLDER_COLORS = ["0x1a1a2e", "0x16213e", "0x0f3460", "0x533483", "0x2d132c", "0x122620"]
 
@@ -163,6 +166,14 @@ def build_video(video_dir: Path, keep_assets: bool = False) -> Path:
     topic_context = data.get("topic_context", "")
 
     total_duration = _probe_duration(audio_path)
+
+    # Kural 11: hiçbir sahne 4 saniyeden uzun kalmasın - eşit paylaşımda sahne
+    # süresi bunu aşıyorsa, her sahneyi aynı notu/sorguyu paylaşan alt-kesimlere böl
+    # (used_urls dedup sayesinde her alt-kesim farklı bir aday görsel/klip alır).
+    raw_seg_duration = total_duration / len(scenes)
+    if raw_seg_duration > MAX_SCENE_SECONDS:
+        sub_count = max(1, ceil(raw_seg_duration / MAX_SCENE_SECONDS))
+        scenes = [scene for scene in scenes for _ in range(sub_count)]
     segment_count = len(scenes)
     seg_duration = total_duration / segment_count
 
@@ -170,16 +181,34 @@ def build_video(video_dir: Path, keep_assets: bool = False) -> Path:
     assets_dir.mkdir(exist_ok=True)
 
     seg_paths = []
+    used_urls: set[str] = set()
     print(f"Toplam ses süresi: {total_duration:.1f} sn, {segment_count} sahne (~{seg_duration:.1f} sn/sahne)")
     last_kind: str | None = None
     for i, scene in enumerate(scenes):
         note, dramatic = scene["note"], scene["dramatic"]
-        query = keywords.to_search_query(note, company=company_hint, context=topic_context, dramatic=dramatic)
-        tag = " [DRAMATİK]" if dramatic else ""
+
+        # Kural 4: en az bir sahne (ilk sahne) markanın logosunu/adını garanti gösterir -
+        # konuyu bilmeyen izleyici bile görsellerden neyden bahsedildiğini anlayabilsin.
+        if i == 0 and company_hint:
+            query = f"{company_hint} logo"
+        else:
+            query = keywords.to_search_query(
+                note, company=company_hint, context=topic_context, dramatic=dramatic
+            )
+        tag = " [DRAMATİK]" if dramatic else (" [MARKA]" if i == 0 else "")
         print(f"  [{i + 1}/{segment_count}]{tag} \"{note[:60]}\" -> arama: \"{query}\"")
+
         clip = stock_media.fetch_clip(
-            query, note, assets_dir, i, exclude_kind=last_kind, company=company_hint
+            query, note, assets_dir, i, exclude_kind=last_kind, company=company_hint, used_urls=used_urls
         )
+        if clip is None and company_hint and query != f"{company_hint} logo":
+            # Kural 6: son çare - konuya en azından şirket adı üzerinden bağlı bir
+            # görsel dene (tamamen kopuk bir görsel yerine).
+            print("      alakalı sonuç yok, son çare olarak marka logosu deneniyor")
+            clip = stock_media.fetch_clip(
+                f"{company_hint} logo", note, assets_dir, i,
+                exclude_kind=last_kind, company=company_hint, used_urls=used_urls,
+            )
         seg_path = assets_dir / f"seg_{i:02d}.mp4"
 
         if clip is None:
@@ -228,7 +257,7 @@ def build_video(video_dir: Path, keep_assets: bool = False) -> Path:
                 "-vf",
                 f"subtitles='{subtitle_arg}':force_style="
                 f"'PlayResX={WIDTH},PlayResY={HEIGHT},"
-                "Fontsize=34,Bold=1,PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
+                "Fontsize=38,Bold=1,PrimaryColour=&HFFFFFF,OutlineColour=&H000000,"
                 "BorderStyle=1,Outline=3,Shadow=1,Alignment=2,MarginV=140,MarginL=48,MarginR=48'",
             ]
             + encode_args

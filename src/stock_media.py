@@ -1,14 +1,18 @@
 """Pexels / Pixabay'den görsel/video klip arama ve indirme.
 
 En az bir API anahtarı (PEXELS_API_KEY veya PIXABAY_API_KEY) tanımlıysa kullanılır.
-Her kaynaktan (çözünürlüğe göre sıralı) birden fazla aday toplanır; her aday
-indirilip src/relevance.py ile konuyla gerçekten alakalı mı diye kontrol edilir -
-ilk alakalı bulunan kullanılır, değilse reddedilip bir sonraki adaya/kaynağa geçilir.
-`exclude_kind` verilirse (önceki sahneyle aynı tür olmasın diye), o türün önceliği
-düşürülür - yine de başka kaynak bulunamazsa aynı tür kullanılabilir.
+Her kaynaktan (çözünürlüğe göre sıralı) birden fazla aday toplanır. RULES.md kural 6
+ve 7'yi uygular:
+- Kural 6 (alaka doğrulama, 2 aşamalı): önce ucuz bir etiket/keyword ön filtresi
+  (stok sitesinin kendi alt-text/tags metniyle sorgu arasında ortak somut kelime var
+  mı) - yoksa indirilmeden elenir; sonra (varsa) src/relevance.py ile Gemini vision
+  kontrolü.
+- Kural 7 (çeşitlilik): `used_urls` setine geçilen URL'ler bir daha kullanılmaz;
+  `exclude_kind` art arda aynı medya türünü (foto/video) engeller.
 """
 
 import os
+import re
 from pathlib import Path
 
 import requests
@@ -23,6 +27,14 @@ _PER_PAGE = 6
 _MIN_VIDEO_WIDTH = 480
 _MAX_CANDIDATES_PER_SOURCE = 3
 
+# relevance kelime-eşleşme kontrolünde göz ardı edilecek jenerik kelimeler
+_STOPWORDS = {
+    "the", "a", "an", "of", "in", "on", "at", "and", "or", "with", "for",
+    "red", "dark", "old", "vintage", "retro", "closeup", "sign", "building",
+    "warning", "tone", "lighting", "dramatic", "glow", "cracked", "broken",
+    "damaged", "logo",
+}
+
 
 def _download(url: str, dest: Path) -> Path:
     resp = requests.get(url, stream=True, timeout=30)
@@ -34,9 +46,10 @@ def _download(url: str, dest: Path) -> Path:
     return dest
 
 
-def _pexels_video_candidates(query: str) -> list[str]:
-    """Her sonucun en yüksek çözünürlüklü dosya varyantını alır, sonuçları
-    çözünürlüğe göre azalan sırada döner."""
+def _pexels_video_candidates(query: str) -> list[tuple[str, str]]:
+    """(url, metadata_text) çiftleri döner - Pexels video API'sinde alt-text/tags
+    standart olarak gelmediği için metadata_text genelde boş kalır (ön filtre bu
+    durumda devre dışı kalır, Gemini vision kontrolüne bırakılır)."""
     if not PEXELS_API_KEY:
         return []
     resp = requests.get(
@@ -60,12 +73,13 @@ def _pexels_video_candidates(query: str) -> list[str]:
             if area > best_area:
                 best_area, best_url = area, f.get("link")
         if best_url:
-            candidates.append((best_area, best_url))
+            metadata = str(video.get("user", {}).get("name", ""))
+            candidates.append((best_area, best_url, metadata))
     candidates.sort(key=lambda c: c[0], reverse=True)
-    return [url for _, url in candidates]
+    return [(url, meta) for _, url, meta in candidates]
 
 
-def _pexels_photo_candidates(query: str) -> list[str]:
+def _pexels_photo_candidates(query: str) -> list[tuple[str, str]]:
     if not PEXELS_API_KEY:
         return []
     resp = requests.get(
@@ -79,16 +93,16 @@ def _pexels_photo_candidates(query: str) -> list[str]:
     photos = resp.json().get("photos") or []
     photos.sort(key=lambda p: (p.get("width") or 0) * (p.get("height") or 0), reverse=True)
 
-    urls = []
+    results = []
     for photo in photos:
         src = photo.get("src", {})
         url = src.get("original") or src.get("large2x") or src.get("portrait")
         if url:
-            urls.append(url)
-    return urls
+            results.append((url, str(photo.get("alt", ""))))
+    return results
 
 
-def _pixabay_video_candidates(query: str) -> list[str]:
+def _pixabay_video_candidates(query: str) -> list[tuple[str, str]]:
     if not PIXABAY_API_KEY:
         return []
     resp = requests.get(
@@ -111,12 +125,12 @@ def _pixabay_video_candidates(query: str) -> list[str]:
             if area > best_area:
                 best_area, best_url = area, variant.get("url")
         if best_url:
-            candidates.append((best_area, best_url))
+            candidates.append((best_area, best_url, str(hit.get("tags", ""))))
     candidates.sort(key=lambda c: c[0], reverse=True)
-    return [url for _, url in candidates]
+    return [(url, meta) for _, url, meta in candidates]
 
 
-def _pixabay_photo_candidates(query: str) -> list[str]:
+def _pixabay_photo_candidates(query: str) -> list[tuple[str, str]]:
     if not PIXABAY_API_KEY:
         return []
     resp = requests.get(
@@ -128,11 +142,12 @@ def _pixabay_photo_candidates(query: str) -> list[str]:
         return []
     hits = resp.json().get("hits") or []
     hits.sort(key=lambda h: (h.get("imageWidth") or 0) * (h.get("imageHeight") or 0), reverse=True)
-    return [
-        h.get("largeImageURL") or h.get("webformatURL")
-        for h in hits
-        if h.get("largeImageURL") or h.get("webformatURL")
-    ]
+    results = []
+    for h in hits:
+        url = h.get("largeImageURL") or h.get("webformatURL")
+        if url:
+            results.append((url, str(h.get("tags", ""))))
+    return results
 
 
 _VIDEO_FIRST = [
@@ -149,6 +164,30 @@ _PHOTO_FIRST = [
 ]
 
 
+def _keywords_of(text: str) -> set[str]:
+    words = re.findall(r"[a-zA-Z]+", text.lower())
+    return {w for w in words if len(w) > 2 and w not in _STOPWORDS}
+
+
+def _keyword_overlap_ok(query: str, company: str, metadata: str) -> bool:
+    """Ucuz ön filtre (kural 6, aşama 1): stok sitesinin kendi etiket/açıklama
+    metniyle (metadata) sorgu arasında en az bir somut ortak kelime (ya da şirket
+    adı) var mı? metadata boşsa (site bu bilgiyi vermiyorsa) karar verilemez,
+    filtre devre dışı kalır (True döner - Gemini vision'a bırakılır)."""
+    if not metadata.strip():
+        return True
+
+    meta_words = _keywords_of(metadata)
+    if not meta_words:
+        return True
+
+    if company and company.lower() in metadata.lower():
+        return True
+
+    query_words = _keywords_of(query) - _keywords_of(company)
+    return bool(query_words & meta_words)
+
+
 def fetch_clip(
     query: str,
     note: str,
@@ -156,16 +195,20 @@ def fetch_clip(
     index: int,
     exclude_kind: str | None = None,
     company: str = "",
+    used_urls: set[str] | None = None,
 ) -> dict | None:
     """query için klip arar. Her kaynaktan en fazla `_MAX_CANDIDATES_PER_SOURCE` aday
-    indirilip relevance.is_relevant() ile kontrol edilir; ilk alakalı bulunan kullanılır,
-    reddedilenler diskten silinir. exclude_kind ("video"/"photo") verilirse önceki
-    sahneyle aynı türden olmasın diye o türün denenme sırası sona atılır. company,
-    alaka kontrolüne ayrı bir alan olarak geçilir (bkz. relevance.is_relevant).
+    toplanır; her aday önce ucuz etiket/keyword ön filtresinden (kural 6/1), sonra
+    (indirildikten sonra) relevance.is_relevant() Gemini vision kontrolünden geçer.
+    used_urls verilirse (kural 7), o sete zaten eklenmiş URL'ler atlanır ve kabul
+    edilen URL sete eklenir - aynı videoda aynı görsel tekrar kullanılmaz.
+    exclude_kind ("video"/"photo") verilirse önceki sahneyle aynı türden olmasın diye
+    o türün denenme sırası sona atılır.
 
     Bulunursa {"path": Path, "kind": "video"|"photo"} döner, hiçbiri bulunamaz/alakalı
     çıkmazsa None (çağıran taraf bu durumda bir placeholder sahne üretmeli)."""
     attempts = _PHOTO_FIRST if exclude_kind == "video" else _VIDEO_FIRST
+    used_urls = used_urls if used_urls is not None else set()
 
     for finder, kind, ext in attempts:
         try:
@@ -173,13 +216,23 @@ def fetch_clip(
         except requests.RequestException:
             continue
 
-        for candidate_url in candidates[:_MAX_CANDIDATES_PER_SOURCE]:
-            dest = dest_dir / f"src_{index:02d}_{kind}.{ext}"
+        tried = 0
+        for candidate_url, metadata in candidates:
+            if candidate_url in used_urls:
+                continue
+            if not _keyword_overlap_ok(query, company, metadata):
+                continue
+            if tried >= _MAX_CANDIDATES_PER_SOURCE:
+                break
+            tried += 1
+
+            dest = dest_dir / f"src_{index:02d}_{kind}_{tried}.{ext}"
             try:
                 _download(candidate_url, dest)
             except requests.RequestException:
                 continue
             if relevance.is_relevant(dest, kind, query, note, company=company):
+                used_urls.add(candidate_url)
                 return {"path": dest, "kind": kind}
             dest.unlink(missing_ok=True)
     return None
