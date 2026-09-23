@@ -175,6 +175,103 @@ font boyutu bir tık büyütülür.
 
 ---
 
+## Ek görsel/ses kuralları (2. tur)
+
+Bu bölümdeki kurallar önceki 14 kuralı **tamamlar**; çelişki olduğunda bu
+kurallar geçerlidir (ör. kural 11'deki 4sn sınırı, kural 17'deki 2-3sn'ye
+düşürüldü).
+
+### 15. Görsel kaynak önceliği (KRİTİK)
+
+Pexels/Pixabay marka içeriği barındırmadığı için artık **birincil kaynak
+değil**. Her sahne için sıra:
+
+- Sahne notu somut bir **rakam** (şirket değeri, teklif tutarı, kullanıcı
+  sayısı vb.) ya da **karşılaştırma** (X vs Y) içeriyorsa, doğrudan **kural
+  16**'daki üretilen grafiğe gidilir (stok sitede "120 milyar dolar" aramak
+  anlamsızdır).
+- Diğer tüm sahneler için: **a) Wikimedia Commons** (logo, kurucu fotoğrafı,
+  genel merkez, ürün görseli - lisans bilgisiyle) → **b) Wayback Machine**
+  (marka-çapa sahnesi ya da "web sitesi" geçen notlar için, şirketin geçmiş
+  bir yıldaki web sitesi ekran görüntüsü) → **c) Pexels/Pixabay** (sadece
+  genel sahneler için son çare, kural 6'daki alaka filtreleriyle).
+
+**Uygulama:** `src/media_router.py` — `resolve_scene()` bu sırayı uygular;
+`src/wikimedia.py` (Commons API, anahtar gerekmez), `src/wayback.py`
+(archive.org availability API + Playwright ile ekran görüntüsü).
+**Bilinen sınır:** Wayback için şirketin domaini bilinmiyor, `{şirket}.com`
+tahmin ediliyor - yanlışsa (site farklı bir domaindeyse) sessizce
+atlanıp bir sonraki kaynağa geçilir.
+
+### 16. Üretilen grafikler
+
+Script'te geçen her önemli rakam için otomatik görsel üretilir: büyük
+puntolu bir rakam kartı (ör. "120 Milyar $ → 4.8 Milyar $" düşüş anlatımı
+için ayrı ayrı iki kart, sırayla). Karşılaştırmalar için iki logoyu (varsa
+Wikimedia'dan, yoksa metin olarak) yan yana koyan bir kart üretilir. Tüm
+grafikler seri renk paletiyle (`graphics.PALETTE`) tutarlıdır.
+
+**Uygulama:** `src/graphics.py` — `extract_stat()`/`extract_comparison()`
+(regex tabanlı tespit), `render_stat_card()`/`render_comparison_card()`
+(Pillow ile çizim). `src/media_router.py` bu tespiti her sahnede önce dener.
+
+### 17. Hareket
+
+Hiçbir görsel sabit durmaz: fotoğraf/üretilen grafik sahnelerine Ken Burns
+(yavaş zoom) uygulanır (video klipler zaten hareketlidir). Sahne geçişleri
+hızlı kesimdir; hiçbir görsel 2-3 saniyeden uzun ekranda kalmaz - sahne
+uzunsa aynı sahneye 2-3 farklı görsel atanır.
+
+**Uygulama:** `src/video_builder.py` — `MAX_SCENE_SECONDS = 3.0`; bunu aşan
+sahneler aynı notu/sorguyu paylaşan alt-kesimlere bölünür (her alt-kesim,
+`used_urls` dedup sayesinde farklı bir aday görsel alma eğilimindedir).
+`_build_segment_from_photo()` zoompan filtresiyle Ken Burns uygular.
+
+### 18. Ses tasarımı
+
+Arka plana telifsiz, seslendirmenin belirgin şekilde altında (-18/-22 dB)
+gerilimli bir müzik eklenir. Rakam kartları ekrana geldiğinde "whoosh",
+twist (dramatik/çöküş) anında "impact" efekti eklenir. Dosyalar
+`assets/audio/` klasöründen okunur.
+
+**Uygulama:** `src/audio_mix.py` — `mix()`, `assets/audio/music.mp3`
+(-20dB'de döngülenir), `whoosh.mp3` (üretilen grafik sahnelerinin
+başlangıcında), `impact.mp3`'ü (ilk dramatik sahnenin başlangıcında) ffmpeg
+`amix`/`adelay` filtreleriyle seslendirmenin üzerine bindirir.
+**Bilinen sınır:** bu dosyalar repoda YOK - `assets/audio/README.md`
+hangi dosyaların nereden bulunup eklenmesi gerektiğini anlatır. Hiçbiri
+yoksa bu katman sessizce atlanır, video normal üretilir.
+
+### 19. Ses klonu desteği
+
+`ELEVENLABS_VOICE_ID` `.env`'den okunur; kullanıcı kendi klonlanmış sesine
+bu değeri değiştirerek kolayca geçebilir.
+
+**Uygulama:** `src/tts.py` — zaten `os.environ.get("ELEVENLABS_VOICE_ID")
+or DEFAULT_VOICE_ID` şeklinde okunuyordu (önceki turda kurulmuştu); bu
+kural sadece bunu teyit eder/belgeler.
+
+### 20. İnsan hook desteği
+
+Bir short klasöründe `hook.mp4` (kullanıcının çektiği 2-4 sn'lik dikey
+video) varsa, video BUNUNLA (kendi sesiyle) başlar, script'in
+seslendirmesi ondan sonra devam eder. Dosya yoksa normal akış çalışır.
+
+**Uygulama:** `src/video_builder.py` — `build_video()`, `hook.mp4`'ü
+1080x1920'ye normalize edip (kendi sesini koruyarak) asıl içeriğin önüne
+ffmpeg concat ile ekler.
+
+### 21. Doğrulama çıktısı
+
+Her video üretiminden sonra her sahne için kullanılan görselin kaynağı
+(Wikimedia/Wayback/üretilen grafik/Pexels-Pixabay/placeholder) ve arama
+sorgusu konsola yazdırılır.
+
+**Uygulama:** `src/video_builder.py` — `_build_visual_track()`, her sahne
+için `sorgu: "..."  |  kaynak: ...` satırını yazdırır.
+
+---
+
 ## Bilinen sınırlar (özet)
 
 - Kural 6 (alaka doğrulama) best-effort'tur: `GEMINI_API_KEY` yoksa Gemini

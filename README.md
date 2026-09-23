@@ -111,6 +111,13 @@ winget install ffmpeg
 ffmpeg -version
 ```
 
+Wikimedia/Wayback görsel kaynağı için ayrıca (bir kere) Playwright'ın Chromium
+tarayıcısını indirmen gerekir:
+
+```bash
+playwright install chromium
+```
+
 ### Önce API çağrısı yapmadan boru hattını test et
 
 ```bash
@@ -151,15 +158,28 @@ videolar değil, sadece short'lar destekleniyor) ve `audio.mp3` hazırsa:
 python build_video.py --dir output/2026-09-16/airbaltic-iflasi
 ```
 
-Bu, `PEXELS_API_KEY` ve/veya `PIXABAY_API_KEY` ile her görsel not için bir
-klip indirir, ffmpeg ile ses + altyazıyla birleştirir ve aynı klasöre
-`video.mp4` olarak kaydeder. İkisi de `.env`'de tanımlı değilse video yine
-üretilir ama stok klip yerine düz renkli placeholder sahneler kullanılır.
+Her sahne için görsel kaynağı RULES.md kural 15'teki önceliği izler: rakam/
+karşılaştırma içeren sahneler için otomatik üretilen bir grafik (anahtar
+gerekmez), diğerleri için sırayla Wikimedia Commons (anahtar gerekmez) →
+Wayback Machine (anahtar gerekmez, Chromium ile ekran görüntüsü) →
+`PEXELS_API_KEY`/`PIXABAY_API_KEY` varsa Pexels/Pixabay (son çare). Hiçbiri
+bulunamazsa düz renkli placeholder sahne kullanılır — video hiçbir zaman
+üretimi durmaz.
+
+Ekstra özellikler:
+- **İnsan hook:** video klasörüne kendi çektiğin 2-4 sn'lik dikey bir
+  `hook.mp4` koyarsan, video onunla (kendi sesiyle) başlar, seslendirme
+  ondan sonra devam eder.
+- **Ses tasarımı:** `assets/audio/` klasörüne `music.mp3`/`whoosh.mp3`/
+  `impact.mp3` koyarsan otomatik miksajlanır (bkz. `assets/audio/README.md`).
+- **Ses klonu:** `.env`'deki `ELEVENLABS_VOICE_ID`'yi kendi klonladığın
+  sesin ID'siyle değiştirmen yeterli.
 
 Ara dosyaları (indirilen klipler, segment videoları) silmeden debug etmek
 istersen: `--keep-assets`.
 
-Pexels/Pixabay anahtarlarını buradan alabilirsin (ikisi de ücretsiz):
+Pexels/Pixabay anahtarlarını buradan alabilirsin (ikisi de ücretsiz, ama
+artık son çare):
 - Pexels: https://www.pexels.com/api/
 - Pixabay: https://pixabay.com/api/docs/
 
