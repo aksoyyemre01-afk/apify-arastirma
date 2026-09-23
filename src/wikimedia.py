@@ -14,6 +14,17 @@ _TIMEOUT = 15
 _API_URL = "https://commons.wikimedia.org/w/api.php"
 _MIN_WIDTH = 300
 
+# Wikimedia'nın User-Agent politikası (meta.wikimedia.org/wiki/User-Agent_policy)
+# hem proje adını HEM DE bir iletişim kanalı (URL/e-posta) ister; ikisi de
+# eksikse istekler oran sınırlamasına takılabilir/engellenebilir. İletişim
+# kanalı olarak repo URL'si kullanılıyor - kullanıcının kişisel bilgisi
+# (e-posta vb.) rızası olmadan üçüncü bir servise gönderilmiyor.
+_USER_AGENT = (
+    "business-stories-automation/1.0 "
+    "(https://github.com/aksoyyemre01-afk/apify-arastirma)"
+)
+_HEADERS = {"User-Agent": _USER_AGENT}
+
 
 def search(query: str) -> list[dict]:
     """query için Wikimedia Commons'ta dosya arar. Her sonuç için
@@ -32,7 +43,7 @@ def search(query: str) -> list[dict]:
                 "iiprop": "url|size|extmetadata|mime",
                 "format": "json",
             },
-            headers={"User-Agent": "business-stories-automation/1.0"},
+            headers=_HEADERS,
             timeout=_TIMEOUT,
         )
     except requests.RequestException:
@@ -82,7 +93,7 @@ def fetch(query: str, dest_dir: Path, index: int) -> dict | None:
             ext = "jpg"
         dest = dest_dir / f"wikimedia_{index:02d}.{ext}"
         try:
-            resp = requests.get(url, stream=True, timeout=30)
+            resp = requests.get(url, headers=_HEADERS, stream=True, timeout=30)
             resp.raise_for_status()
             with open(dest, "wb") as f:
                 for chunk in resp.iter_content(chunk_size=1 << 16):
