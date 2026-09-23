@@ -81,7 +81,7 @@ def synthesize_with_timestamps(text: str, output_path: str) -> list[dict] | None
             text=text,
         )
 
-        audio_bytes = base64.b64decode(result.audio_base64)
+        audio_bytes = base64.b64decode(result.audio_base_64)
         with open(output_path, "wb") as f:
             f.write(audio_bytes)
 
