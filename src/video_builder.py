@@ -30,7 +30,7 @@ import subprocess
 from math import ceil
 from pathlib import Path
 
-from . import audio_mix, keywords, media_router, subtitles
+from . import audio_mix, graphics, keywords, media_router, subtitles
 
 WIDTH = 1080
 HEIGHT = 1920
@@ -102,6 +102,24 @@ def _build_segment_from_photo(src: Path, dest: Path, duration: float) -> None:
     ])
 
 
+def _build_segment_from_logo(src: Path, dest: Path, duration: float) -> None:
+    """Logo sahneleri için: src zaten graphics.compose_logo_on_background() ile
+    tam WIDTHxHEIGHT boyutunda, düz zemine ortalanmış olarak üretildi - burada
+    KIRPMA yapılmaz, sadece hafif (en fazla %8) bir zoom uygulanır ki logonun
+    tamamı her zaman görünür kalsın (kural 22)."""
+    frames = max(int(duration * FPS), 1)
+    _run([
+        "ffmpeg", "-y",
+        "-loop", "1", "-i", str(src),
+        "-vf",
+        f"scale={WIDTH}:{HEIGHT},"
+        f"zoompan=z='min(zoom+0.0006,1.08)':d={frames}:s={WIDTH}x{HEIGHT}:fps={FPS},setsar=1",
+        "-t", f"{duration:.3f}",
+        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+        str(dest),
+    ])
+
+
 def _build_segment_placeholder(dest: Path, duration: float, index: int) -> None:
     color = PLACEHOLDER_COLORS[index % len(PLACEHOLDER_COLORS)]
     _run([
@@ -124,25 +142,28 @@ def _extract_scenes(data: dict) -> tuple[list[dict], str]:
 
     Yeni format (hook/setup/twist beat yapısı) ve eski format (düz visual_notes
     listesi) her ikisi de desteklenir. Döndürülen her sahne
-    {"note": str, "dramatic": bool} şeklindedir - dramatic=True sadece twist
-    bölümündeki sahnelerde olur."""
+    {"note": str, "dramatic": bool, "beat_narration": str} şeklindedir -
+    dramatic=True sadece twist bölümündeki sahnelerde olur; beat_narration, o
+    notun ait olduğu bölümün TAM seslendirme metnidir (kural 23 - notta geçmeyen
+    ama aynı bölümde SESLENDİRİLEN bir rakamı/markayı da yakalayabilmek için)."""
     hook = data.get("hook")
     if isinstance(hook, dict):
         scenes = []
         narration_parts = []
         for beat_name, dramatic in (("hook", False), ("setup", False), ("twist", True)):
             beat = data.get(beat_name) or {}
-            narration_parts.append(beat.get("narration", ""))
+            beat_narration = beat.get("narration", "")
+            narration_parts.append(beat_narration)
             for note in beat.get("visual_notes", []):
-                scenes.append({"note": note, "dramatic": dramatic})
+                scenes.append({"note": note, "dramatic": dramatic, "beat_narration": beat_narration})
         narration = data.get("narration_full") or " ".join(narration_parts)
         return scenes, narration
 
     # eski format: düz visual_notes listesi + narration
     visual_notes = data.get("visual_notes") or []
-    scenes = [{"note": n, "dramatic": False} for n in visual_notes]
-    narration = data.get("narration", "")
-    return scenes, narration
+    full_narration = data.get("narration", "")
+    scenes = [{"note": n, "dramatic": False, "beat_narration": full_narration} for n in visual_notes]
+    return scenes, full_narration
 
 
 def _build_visual_track(
@@ -154,6 +175,7 @@ def _build_visual_track(
     segment_count = len(scenes)
     seg_paths = []
     used_urls: set[str] = set()
+    used_stats: set[str] = set()
     whoosh_at: list[float] = []
     impact_at: list[float] = []
     last_kind: str | None = None
@@ -161,6 +183,8 @@ def _build_visual_track(
     print(f"Toplam ses süresi hesaplandı, {segment_count} sahne (~{seg_duration:.1f} sn/sahne)")
     for i, scene in enumerate(scenes):
         note, dramatic = scene["note"], scene["dramatic"]
+        beat_narration = scene.get("beat_narration", "")
+        allow_card = scene.get("allow_generated_card", True)
         is_brand_anchor = i == 0 and bool(company_hint)
         scene_start = i * seg_duration
 
@@ -171,6 +195,8 @@ def _build_visual_track(
             note, query, company_hint, assets_dir, i,
             exclude_kind=last_kind, used_urls=used_urls,
             dramatic=dramatic, is_brand_anchor=is_brand_anchor,
+            beat_narration=beat_narration, allow_generated_card=allow_card,
+            used_stats=used_stats,
         )
         if result is None and company_hint and not is_brand_anchor:
             # Kural 15 son çare: konuya en azından marka adı üzerinden bağlı bir
@@ -179,24 +205,40 @@ def _build_visual_track(
                 f"{company_hint} logo", f"{company_hint} logo", company_hint, assets_dir, i,
                 exclude_kind=last_kind, used_urls=used_urls, dramatic=False, is_brand_anchor=True,
             )
+        if result is None:
+            # Kural 24: hiçbir kaynak (Wikimedia/Wayback/Pexels/marka logosu) uygun
+            # bir şey bulamadıysa, alakasız bir stok görselle uğraşmak yerine
+            # notun kendi metnini gösteren sade bir kart kullan - düz placeholder
+            # renkten de, yanlış bir stok fotoğraftan da her zaman daha iyidir.
+            try:
+                text_card_path = graphics.render_text_card(note, assets_dir, i, dramatic=dramatic)
+                result = {
+                    "path": text_card_path, "kind": "photo",
+                    "source": "üretilen grafik (metin kartı, son çare)",
+                }
+            except Exception as e:
+                print(f"      metin kartı da üretilemedi ({e}), placeholder kullanılıyor")
+                result = {"path": None, "kind": "placeholder", "source": "placeholder (hiçbir şey üretilemedi)"}
 
         tag = " [MARKA]" if is_brand_anchor else (" [DRAMATİK]" if dramatic else "")
-        source_label = result["source"] if result else "placeholder (uygun görsel bulunamadı)"
         # Kural 21: her sahne için kaynak + sorgu konsola yazdırılır.
         print(f"  [{i + 1}/{segment_count}]{tag} \"{note[:55]}\"")
-        print(f"      sorgu: \"{query}\"  |  kaynak: {source_label}")
+        print(f"      sorgu: \"{query}\"  |  kaynak: {result['source']}")
 
-        if result and "üretilen grafik" in result["source"]:
+        if "üretilen grafik" in result["source"]:
             whoosh_at.append(scene_start)
         if dramatic and not impact_at:
             impact_at.append(scene_start)
 
         seg_path = assets_dir / f"seg_{i:02d}.mp4"
-        if result is None:
+        if result["kind"] == "placeholder":
             _build_segment_placeholder(seg_path, seg_duration, i)
         elif result["kind"] == "video":
             _build_segment_from_video(result["path"], seg_path, seg_duration)
             last_kind = "video"
+        elif result["kind"] == "logo":
+            _build_segment_from_logo(result["path"], seg_path, seg_duration)
+            last_kind = "photo"
         else:
             _build_segment_from_photo(result["path"], seg_path, seg_duration)
             last_kind = "photo"
@@ -245,10 +287,19 @@ def build_video(video_dir: Path, keep_assets: bool = False) -> Path:
 
     # Kural 17: hiçbir sahne 3 saniyeden uzun kalmasın - eşit paylaşımda sahne
     # süresi bunu aşıyorsa, her sahneyi aynı notu/sorguyu paylaşan alt-kesimlere böl.
+    # Kural 23: bir notun alt-kesimlerinden sadece İLKİ üretilen kart üretebilir -
+    # aksi halde AYNI kart art arda birden fazla alt-kesimde yeniden üretilip
+    # ekranda olması gerekenden çok daha uzun süre kalmış gibi görünür.
     raw_seg_duration = total_duration / len(scenes)
     if raw_seg_duration > MAX_SCENE_SECONDS:
         sub_count = max(1, ceil(raw_seg_duration / MAX_SCENE_SECONDS))
-        scenes = [scene for scene in scenes for _ in range(sub_count)]
+        scenes = [
+            {**scene, "allow_generated_card": sub_index == 0}
+            for scene in scenes
+            for sub_index in range(sub_count)
+        ]
+    else:
+        scenes = [{**scene, "allow_generated_card": True} for scene in scenes]
     seg_duration = total_duration / len(scenes)
 
     assets_dir = video_dir / "assets"

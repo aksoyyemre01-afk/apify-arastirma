@@ -46,9 +46,11 @@ def search(query: str) -> list[dict]:
             headers=_HEADERS,
             timeout=_TIMEOUT,
         )
-    except requests.RequestException:
+    except requests.RequestException as e:
+        print(f"      [Wikimedia] API isteği başarısız: {e}")
         return []
     if resp.status_code != 200:
+        print(f"      [Wikimedia] API HTTP {resp.status_code} döndü")
         return []
 
     pages = (resp.json().get("query") or {}).get("pages") or {}
@@ -79,14 +81,20 @@ def search(query: str) -> list[dict]:
     return results
 
 
-def fetch(query: str, dest_dir: Path, index: int) -> dict | None:
-    """query için en iyi Commons sonucunu indirir.
-    Bulunursa {'path': Path, 'kind': 'photo', 'license': str, 'title': str} döner,
-    bulunamazsa None (çağıran taraf bir sonraki kaynağa geçmeli)."""
+def fetch(query: str, dest_dir: Path, index: int, exclude_urls: set[str] | None = None) -> dict | None:
+    """query için en iyi Commons sonucunu indirir. exclude_urls verilirse (kural 7 -
+    aynı videoda aynı görsel tekrar kullanılmasın), o URL'lerdeki sonuçlar atlanır.
+    Bulunursa {'path': Path, 'kind': 'photo', 'license': str, 'title': str, 'url': str}
+    döner, bulunamazsa None (çağıran taraf bir sonraki kaynağa geçmeli)."""
+    exclude_urls = exclude_urls or set()
     results = search(query)
+    if not results:
+        print(f"      [Wikimedia] \"{query}\" için sonuç bulunamadı")
+        return None
+
     for result in results:
         url = result["url"]
-        if not url:
+        if not url or url in exclude_urls:
             continue
         ext = url.rsplit(".", 1)[-1].lower()
         if ext not in ("jpg", "jpeg", "png", "webp"):
@@ -99,12 +107,16 @@ def fetch(query: str, dest_dir: Path, index: int) -> dict | None:
                 for chunk in resp.iter_content(chunk_size=1 << 16):
                     if chunk:
                         f.write(chunk)
-        except requests.RequestException:
+        except requests.RequestException as e:
+            print(f"      [Wikimedia] indirme başarısız ({url}): {e}")
             continue
         return {
             "path": dest,
             "kind": "photo",
             "license": result["license"],
             "title": result["title"],
+            "url": url,
         }
+
+    print(f"      [Wikimedia] \"{query}\" için tüm sonuçlar zaten kullanılmış/indirilemedi")
     return None

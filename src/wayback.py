@@ -5,7 +5,8 @@
 snapshot URL'sini bul, (2) Playwright (headless Chromium, bu ortamda önceden kurulu)
 ile o snapshot'ın ekran görüntüsünü al. Şirketin domaini bilinmediği için basit bir
 "{şirket}.com" tahminiyle çalışılır - yanlışsa (site yoksa/snapshot bulunamazsa)
-sessizce None döner, çağıran taraf bir sonraki kaynağa geçer.
+None döner ama HER ZAMAN nedenini konsola yazar (kural 5 - hata sessizce
+yutulmasın); çağıran taraf None'da bir sonraki kaynağa geçer.
 """
 
 import glob
@@ -51,29 +52,44 @@ def find_snapshot_url(domain: str, year: int) -> str | None:
             params={"url": domain, "timestamp": f"{year}0101"},
             timeout=_TIMEOUT,
         )
-    except requests.RequestException:
+    except requests.RequestException as e:
+        print(f"      [Wayback] availability API isteği başarısız ({domain}): {e}")
         return None
     if resp.status_code != 200:
+        print(f"      [Wayback] availability API HTTP {resp.status_code} döndü ({domain})")
         return None
     closest = (resp.json().get("archived_snapshots") or {}).get("closest") or {}
     if closest.get("available"):
         return closest.get("url")
+    print(f"      [Wayback] {domain} için {year} civarında arşivlenmiş snapshot bulunamadı")
     return None
 
 
 def screenshot(url: str, dest_path: Path) -> bool:
-    """url'yi headless Chromium ile açıp ekran görüntüsü alır. Playwright/Chromium
-    kullanılamazsa (paket eksik, tarayıcı bulunamadı, sayfa zaman aşımı vb.) False
-    döner - istisna fırlatmaz, çağıran taraf bunu bir sonraki kaynağa geçiş sinyali
-    olarak kullanır."""
+    """url'yi headless Chromium ile açıp ekran görüntüsü alır. Başarısız olursa
+    NEDENİNİ konsola yazıp False döner (istisna fırlatmaz) - çağıran taraf bunu
+    bir sonraki kaynağa geçiş sinyali olarak kullanır."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
+        print(
+            "      [Wayback] 'playwright' paketi kurulu değil - "
+            "'pip install -r requirements.txt' çalıştırdığından emin ol"
+        )
         return False
 
+    executable_path = _find_chromium_executable()
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(executable_path=_find_chromium_executable())
+            try:
+                browser = p.chromium.launch(executable_path=executable_path)
+            except Exception as e:
+                print(
+                    f"      [Wayback] Chromium başlatılamadı ({e}). "
+                    "Muhtemelen tarayıcı ikili dosyası eksik - "
+                    "'playwright install chromium' çalıştırman gerekiyor."
+                )
+                return False
             try:
                 page = browser.new_page(viewport={"width": WIDTH, "height": HEIGHT})
                 page.goto(url, timeout=20000, wait_until="load")
@@ -81,17 +97,27 @@ def screenshot(url: str, dest_path: Path) -> bool:
             finally:
                 browser.close()
         return dest_path.exists()
-    except Exception:
+    except Exception as e:
+        print(f"      [Wayback] ekran görüntüsü alınamadı ({url}): {e}")
         return False
 
 
-def fetch(company: str, dest_dir: Path, index: int, year: int = 2005) -> dict | None:
+def fetch(
+    company: str, dest_dir: Path, index: int, year: int = 2005, exclude_urls: set[str] | None = None
+) -> dict | None:
     """company için tahmini domainin `year`e en yakın Wayback snapshot'ını bulup
-    ekran görüntüsünü alır. Bulunursa {'path': Path, 'kind': 'photo',
-    'snapshot_url': str} döner, herhangi bir adımda başarısız olursa None."""
+    ekran görüntüsünü alır. exclude_urls verilirse (kural 7) ve bulunan snapshot
+    zaten kullanılmışsa None döner. Bulunursa {'path': Path, 'kind': 'photo',
+    'snapshot_url': str} döner, herhangi bir adımda başarısız olursa None -
+    her başarısızlık nedeniyle birlikte konsola yazılır."""
+    exclude_urls = exclude_urls or set()
     domain = _guess_domain(company)
+    print(f"      [Wayback] deneniyor: {domain} (~{year})")
     snapshot_url = find_snapshot_url(domain, year)
     if not snapshot_url:
+        return None
+    if snapshot_url in exclude_urls:
+        print(f"      [Wayback] snapshot zaten kullanılmış: {snapshot_url}")
         return None
 
     dest = dest_dir / f"wayback_{index:02d}.png"

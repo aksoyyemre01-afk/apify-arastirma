@@ -152,6 +152,79 @@ def _generate(note: str, company: str, context: str, dramatic: bool) -> str | No
         return None
 
 
+_LABEL_KEYWORDS = [
+    (("değer", "value", "valuation"), "PİYASA DEĞERİ"),
+    (("teklif", "offer"), "TEKLİF TUTARI"),
+    (("kullanıcı", "user"), "KULLANICI SAYISI"),
+    (("kayıp", "zarar", "loss"), "KAYIP"),
+    (("kâr", "kar ", "profit"), "KÂR"),
+    (("gelir", "revenue"), "GELİR"),
+    (("satış", "sales"), "SATIŞ"),
+    (("maaş", "salary"), "MAAŞ"),
+]
+
+
+def _fallback_stat_label(note: str) -> str:
+    lower = note.lower()
+    for words, label in _LABEL_KEYWORDS:
+        if any(w in lower for w in words):
+            return label
+    return "RAKAM"
+
+
+def clean_stat_label(note: str, number_text: str) -> str:
+    """Rakam kartında sayının altında gösterilecek 1-3 kelimelik KISA bir etiket
+    üretir (kural 23 - kartta notun tamamı değil, kısa bir etiket görünmeli).
+    Gemini kullanılamazsa basit bir anahtar-kelime eşleşmesine düşer."""
+    client = _get_client()
+    if client is not None:
+        try:
+            prompt = (
+                f"Şu cümledeki \"{number_text}\" rakamı ne anlama geliyor? Bunu bir rakam "
+                "kartının altında gösterilecek 1-3 kelimelik, BÜYÜK HARFLİ, kısa bir etikete "
+                "çevir (ör. 'PİYASA DEĞERİ', 'TEKLİF TUTARI', 'KULLANICI SAYISI', 'KAYIP'). "
+                "Sadece etiketi yaz, başka açıklama, tırnak veya noktalama ekleme.\n\n"
+                f"Cümle: {note}"
+            )
+            response = client.models.generate_content(model=MODEL, contents=prompt)
+            label = (response.text or "").strip().strip('"').strip().upper()
+            if label and len(label) <= 40:
+                return label
+        except Exception:
+            pass
+    return _fallback_stat_label(note)
+
+
+def detect_other_brands(note: str, beat_narration: str, own_company: str) -> list[str]:
+    """note/beat_narration içinde own_company DIŞINDA ismiyle geçen başka bir
+    şirket/marka var mı diye Gemini'ye sorar (kural 4 - script'te geçen diğer
+    şirketler için de logo/karşılaştırma kartı üretilsin). En fazla 2 marka adı
+    döner; Gemini kullanılamazsa ya da hiçbir marka bulunmazsa boş liste döner
+    (regex ile güvenilir tespit edilemeyecek kadar çeşitli bir dil kalıbı
+    olduğundan burada sessiz best-effort tercih edildi)."""
+    client = _get_client()
+    if client is None:
+        return []
+    try:
+        prompt = (
+            f'Aşağıdaki metinde "{own_company}" DIŞINDA, ismiyle açıkça geçen başka bir '
+            "şirket/marka var mı? Varsa sadece marka isim(ler)ini virgülle ayırarak yaz "
+            "(en fazla 2 tane, sadece özel isim, başka hiçbir kelime ekleme). Yoksa sadece "
+            "YOK yaz.\n\n"
+            f"Sahne notu: {note}\n"
+            f"Bağlam cümlesi: {beat_narration}"
+        )
+        response = client.models.generate_content(model=MODEL, contents=prompt)
+        text = (response.text or "").strip()
+        if not text or text.upper().startswith("YOK"):
+            return []
+        brands = [b.strip() for b in text.split(",") if b.strip()]
+        brands = [b for b in brands if b.lower() != own_company.strip().lower()]
+        return brands[:2]
+    except Exception:
+        return []
+
+
 def _fallback(company: str, context: str, dramatic: bool) -> str:
     """Gemini kullanılamadığında (ya da ürettiği ifade soyut çıktığında) somut,
     şirkete çapalı bir yedek üretir. 'crisis'/'product closeup' gibi soyut/belirsiz

@@ -272,6 +272,95 @@ için `sorgu: "..."  |  kaynak: ...` satırını yazdırır.
 
 ---
 
+## Ek düzeltmeler (3. tur — gerçek çalıştırma geri bildirimi)
+
+Bu bölüm, gerçek bir üretimde (Google/Yahoo hikayesi) gözlemlenen somut
+hatalardan çıkan kuralları tanımlar; önceki kuralları tamamlar.
+
+### 22. Logo render (kırpma yok, düz zemin)
+
+Wikimedia'dan gelen logolar genelde şeffaf PNG'dir; ffmpeg'in yuv420p
+kodlaması şeffaflığı desteklemediği için şeffaf alanlar SİYAHA döner (sadece
+logonun dış çizgileri görünür kalır). Bu yüzden her logo, video segmentine
+dönüştürülmeden önce düz bir zemine (varsayılan beyaz) tamamı görünecek
+şekilde (contain, kırpma yok) kompoze edilir; sadece hafif (en fazla %8) bir
+zoom animasyonu uygulanır - agresif Ken Burns kırpması yok.
+
+**Uygulama:** `src/graphics.py` — `compose_logo_on_background()` (PIL ile
+alfa kanalını doğru karıştırır); `src/video_builder.py` —
+`_build_segment_from_logo()` (kırpmasız hafif zoom). `src/media_router.py`
+— `_fetch_logo_scene()` bu iki fonksiyonu birlikte kullanan, "logo" türünde
+sonuç döndüren ortak yol.
+
+### 23. Kart tekrarını ve süresini sınırlama
+
+Aynı üretilen kart (rakam/karşılaştırma/logo), tempo sınırı (kural 17) bir
+notu birden fazla alt-kesime böldüğünde ya da aynı rakam bir bölümün birden
+fazla sahnesinde (notun kendisinde geçmeyip o bölümün seslendirmesinde
+geçtiğinde) tekrar tespit edildiğinde, art arda/birden fazla kez
+üretilip ekranda olması gerekenden çok daha uzun süre kalmış gibi
+görünmesin.
+
+**Uygulama:** `src/video_builder.py` — bir notun alt-kesimlerinden sadece
+İLKİ (`allow_generated_card=True`) kart üretebilir. `src/media_router.py`
+— `used_stats` seti, aynı rakamın bir video boyunca yalnızca bir kez kart
+olarak kullanılmasını garanti eder.
+
+### 24. Rakam kartı içeriği ve eksiksizliği
+
+Rakam kartında SADECE rakam ve 1-3 kelimelik kısa bir etiket görünür (notun
+tamamı değil). Script'te seslendirilen (ama görsel notunda birebir
+geçmeyebilen) TÜM önemli rakamlar için kart üretilebilmelidir.
+
+**Uygulama:** `src/graphics.py` — `extract_stat()` artık sadece rakamı
+döner (eski hâli notun geri kalanını "etiket" diye kullanıyordu - bu bug'dı).
+`src/keywords.py` — `clean_stat_label()` Gemini ile (yoksa anahtar kelime
+sözlüğüyle) 1-3 kelimelik gerçek bir etiket üretir. `src/video_builder.py`
+— her sahnenin notu VE o notun ait olduğu bölümün TAM seslendirmesi
+(`beat_narration`) birlikte taranır, böylece bir rakam sadece o cümlede
+SÖYLENMİŞ ama görsel notunda YAZILMAMIŞ olsa bile yakalanır.
+
+### 25. Diğer markaların görselleri
+
+Script'te ana konu dışında ismiyle geçen başka bir şirket/marka (ör. bir
+teklif/rakip bağlamında) için de mümkünse gerçek logosu gösterilir; iki
+marka aynı cümlede/sahnede geçiyorsa yan yana bir karşılaştırma kartı
+üretilir.
+
+**Uygulama:** `src/keywords.py` — `detect_other_brands()` (Gemini ile,
+best-effort); `src/media_router.py` bunu regex tabanlı "X vs Y" tespitinden
+sonraki bir katman olarak dener - 2 marka bulunursa karşılaştırma kartı,
+1 marka bulunursa o markanın logo sahnesi üretilir.
+
+### 26. Wayback ve Wikimedia hataları asla sessiz kalmaz
+
+Bu kaynaklardan biri başarısız olursa (ağ hatası, API hatası, Chromium
+tarayıcısı eksik/kurulu değil, snapshot bulunamadı vb.) NEDENİ konsola
+yazdırılır - sessizce None dönüp bir sonraki kaynağa geçmek, sorunun asla
+fark edilmemesine yol açıyordu.
+
+**Uygulama:** `src/wikimedia.py`/`src/wayback.py` — her başarısızlık
+noktasında (`[Wikimedia]`/`[Wayback]` önekiyle) açıklayıcı bir `print()`
+satırı var; Playwright/Chromium eksikse bunun için özel, eyleme geçirilebilir
+bir mesaj (`playwright install chromium` çalıştırma talimatı) verilir.
+
+### 27. Pexels/Pixabay alakasız çıkarsa kart tercih edilir
+
+Hiçbir kaynaktan (Wikimedia, Wayback, Pexels/Pixabay - alaka filtresinden
+geçen) uygun bir görsel bulunamazsa, marka logosu son çare olarak denenir;
+o da bulunamazsa alakasız bir stok görsel kullanmak yerine notun kendi
+metnini gösteren sade bir kart kullanılır. Düz renkli placeholder artık
+gerçekten son çaredir (kart üretimi bile başarısız olursa).
+
+**Uygulama:** `src/graphics.py` — `render_text_card()`;
+`src/video_builder.py` — `_build_visual_track()`'teki son adım. Ayrıca
+`src/relevance.py`'nin Gemini vision prompt'una, gerçek çalıştırmada
+gözlemlenen somut hatalı-kabul örnekleri (alakasız vintage bilgisayar,
+yangın alarmı, jenerik cam bina) negatif örnek olarak eklendi - bu tür
+yüzeysel eşleşmeleri daha güvenilir reddetmesi için.
+
+---
+
 ## Bilinen sınırlar (özet)
 
 - Kural 6 (alaka doğrulama) best-effort'tur: `GEMINI_API_KEY` yoksa Gemini
@@ -283,3 +372,16 @@ için `sorgu: "..."  |  kaynak: ...` satırını yazdırır.
   varlıkları) bu ortamda üretilemeyen tasarım/ML kaynakları gerektirir;
   kod bunlar için en iyi pratik yaklaşımı (ortalanmış kırpma, sabit stil,
   opsiyonel varlık klasörü) uygular ama mükemmel değildir.
+- Kural 25 (`detect_other_brands`) `GEMINI_API_KEY` gerektirir; anahtar
+  yoksa diğer markalar sadece notta zaten "X vs Y" gibi açıkça yazılmışsa
+  (regex ile) yakalanır, örtük geçen marka isimleri kaçırılabilir.
+- Kural 15/22'deki Wayback domain tahmini (`{şirket}.com`) hâlâ bir
+  heuristiktir - farklı bir domaindeki şirketler için (ör. `.io`/`.net`
+  uzantılı ya da adı domaninden çok farklı olan şirketler) Wayback hiç
+  sonuç bulamayabilir; bu artık konsola açıkça yazılır (kural 26), sessiz
+  kalmaz.
+- Kural 6/27'deki Gemini vision alaka filtresi hâlâ mükemmel değildir -
+  somut negatif örneklerle güçlendirildi ama yine de yanlışlıkla "EVET"
+  diyebilir; bu durumda tek garanti, sonucun asla markaya tamamen yabancı
+  bir görsel olmaması için son çarenin marka logosu/metin kartı olmasıdır,
+  vision'ın kendi doğruluğu garanti edilmez.

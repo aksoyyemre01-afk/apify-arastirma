@@ -65,9 +65,11 @@ _STAT_PATTERN = re.compile(
 _YEAR_PATTERN = re.compile(r"\b(19|20)\d{2}\b")
 
 
-def extract_stat(text: str) -> tuple[str, str] | None:
-    """text içinde somut bir büyüklük/rakam ifadesi varsa (number_text, label_text)
-    döner, yoksa None. label_text, rakamın çıkarıldığı kısa bağlam metnidir."""
+def extract_stat(text: str) -> str | None:
+    """text içinde somut bir büyüklük/rakam ifadesi varsa (ör. '44.6 milyar dolar')
+    onu döner, yoksa None. Kartın KISA etiketi burada üretilmez - notun geri kalanı
+    bir cümle kadar uzun olabileceğinden (kural 22) bunun yerine
+    keywords.clean_stat_label() ile 1-3 kelimelik bir etiket üretilmeli."""
     match = _STAT_PATTERN.search(text)
     if not match:
         return None
@@ -76,9 +78,7 @@ def extract_stat(text: str) -> tuple[str, str] | None:
     # emin olmak için ayrıca kontrol) - yıl-only eşleşmeleri filtrele.
     if _YEAR_PATTERN.fullmatch(number_text.strip()):
         return None
-    label = (text[: match.start()] + text[match.end():]).strip(" ,.-")
-    label = label[:60]
-    return number_text, label
+    return number_text
 
 
 _COMPARISON_PATTERN = re.compile(r"(.+?)\s+(?:vs\.?|karşı(?:sında)?|karşılık)\s+(.+)", re.IGNORECASE)
@@ -139,6 +139,50 @@ def render_stat_card(number_text: str, label_text: str, dest_dir: Path, index: i
     _draw_wrapped_text(draw, label_text, label_font, WIDTH - 240, y, PALETTE["text"])
 
     dest = dest_dir / f"gen_stat_{index:02d}.png"
+    img.save(dest)
+    return dest
+
+
+def compose_logo_on_background(
+    logo_path: Path, dest_dir: Path, index: int, background: tuple[int, int, int] = (255, 255, 255)
+) -> Path:
+    """Bir logo dosyasını (genelde Wikimedia'dan gelen şeffaf PNG/webp) düz renkli
+    bir zemine (varsayılan beyaz) ortalayıp sığdırarak (contain, kırpma yok) tek
+    parça bir görsel üretir. Bu adım önemli: şeffaf PNG'ler ffmpeg'in yuv420p
+    kodlamasında şeffaflık desteklenmediği için siyah zemine dönüşür - PIL burada
+    alfa kanalını doğru şekilde beyaz zemine karıştırır (RULES.md kural 22)."""
+    canvas = Image.new("RGB", (WIDTH, HEIGHT), background)
+    try:
+        logo = Image.open(logo_path).convert("RGBA")
+        # Logo, ekranın ~70%'ine (genişlik) / ~40%'ına (yükseklik) sığacak şekilde
+        # küçültülür (contain) - hiçbir zaman kırpılmaz, tamamı her zaman görünür.
+        logo.thumbnail((int(WIDTH * 0.7), int(HEIGHT * 0.4)))
+        canvas.paste(
+            logo,
+            (int((WIDTH - logo.width) / 2), int((HEIGHT - logo.height) / 2)),
+            logo,
+        )
+    except Exception:
+        pass  # bozuk/okunamayan dosya - düz zemin döner, çağıran taraf yine de kullanabilir
+
+    dest = dest_dir / f"gen_logo_{index:02d}.jpg"
+    canvas.convert("RGB").save(dest, quality=92)
+    return dest
+
+
+def render_text_card(text: str, dest_dir: Path, index: int, dramatic: bool = False) -> Path:
+    """Hiçbir uygun stok/marka görseli bulunamadığında (kural 24) son çare olarak
+    kullanılan, sahnenin kendi metnini gösteren sade bir kart - alakasız bir stok
+    fotoğraftan (ör. rastgele bir bina/alarm görseli) her zaman daha güvenlidir."""
+    bg = PALETTE["background_alt"] if dramatic else PALETTE["background"]
+    img = Image.new("RGB", (WIDTH, HEIGHT), bg)
+    draw = ImageDraw.Draw(img)
+
+    font = _load_font(56, bold=True)
+    y = HEIGHT // 2 - 100
+    _draw_wrapped_text(draw, text[:120], font, WIDTH - 200, y, PALETTE["text"], spacing=16)
+
+    dest = dest_dir / f"gen_text_{index:02d}.png"
     img.save(dest)
     return dest
 
