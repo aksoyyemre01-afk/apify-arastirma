@@ -39,30 +39,35 @@ OUTPUT_DIR = Path("output")
 
 
 # --------------------------------------------------------------------------- dry-run içerikleri
-# Konudan bağımsız şablon: şirket adı topic'ten gelir; tüm sahne tiplerini,
-# gizemli hook + reveal'ı, logosu bulunamayan bir tarafı (yazı logosu) ve 3 sn'den
-# uzun bir sahnenin bölünmesini test eder. Ekrana çıkan metinlerde "[DRY RUN]" yoktur
+# Konudan bağımsız şablon: şirket adı topic'ten gelir; tüm sahne tiplerini, gizemli
+# hook + reveal'ı, gerçek iki logolu bir karşılaştırmayı ve 3 sn'den uzun bir sahnenin
+# farklı tipe bölünmesini test eder. Ekrana çıkan metinlerde "[DRY RUN]" yoktur
 # (kural 10); sahte olduğu başlıkta ve klasör adında belirtilir.
+# Dry-run karşılaştırmasının karşı tarafı: konunun şirketinden farklı ilk gerçek marka.
+_DRY_RUN_RIVALS = ("Apple", "Samsung", "Google")
+
+
 def _dry_run_short(topic: dict, suffix: str = "") -> ShortScript:
     c = topic.get("company") or "Şirket"
+    rival = next(r for r in _DRY_RUN_RIVALS if r.lower() != c.lower())
     scenes = [
         Scene(narration="Tek bir kararla milyarlarca dolar kaybeden şirketi biliyor musunuz?",
               scene_type="big_number", value="10", unit="MİLYAR $", label="Tek kararın bedeli"),
         Scene(narration=f"Cevap: {c}.", scene_type="logo_intro", brand=c, reveal=True),
         Scene(narration=f"{c}, 1998 yılında pazarın açık ara lideriydi.",
-              scene_type="timeline", year="1998", text="Pazarın açık ara lideri", brand=c),
+              scene_type="timeline", year="1998", text="Pazarın açık ara lideri", brand=c, mood="rise"),
         Scene(narration="Şirketin değeri 250 milyar dolara ulaştı.",
-              scene_type="big_number", value="250", unit="MİLYAR $", label="Piyasa değeri", brand=c),
-        Scene(narration="Sonra yepyeni bir rakip sahneye çıktı.",
-              scene_type="comparison", left_brand=c, right_brand="Yeni rakip",
-              left_value="LİDER", right_value="YENİ", highlight_side="right"),
+              scene_type="big_number", value="250", unit="MİLYAR $", label="Piyasa değeri", brand=c, mood="rise"),
+        Scene(narration=f"Sonra {rival} sahneye çıktı.",
+              scene_type="comparison", left_brand=c, right_brand=rival,
+              left_value="LİDER", right_value="YENİ RAKİP", highlight_side="right"),
         Scene(narration="Satışlar sadece birkaç yıl içinde çakıldı.",
               scene_type="chart", direction="down", points=[100, 92, 60, 31, 12],
-              point_labels=["2007", "2008", "2009", "2010", "2011"], end_value="-%88", brand=c),
+              point_labels=["2007", "2008", "2009", "2010", "2011"], end_value="-%88", brand=c, mood="fall"),
         Scene(narration="Yönetim değişime bir türlü ayak uyduramadı.",
-              scene_type="quote", text="Değişime ayak uyduramadı", highlight=["Değişime"]),
+              scene_type="quote", text="Değişime ayak uyduramadı", highlight=["Değişime"], mood="fall"),
         Scene(narration="Sonunda şirket, zirvedeki değerinin çok küçük bir kısmına, yalnızca 7 milyar dolara satıldı.",
-              scene_type="big_number", value="7", unit="MİLYAR $", label="Satış fiyatı", brand=c),
+              scene_type="big_number", value="7", unit="MİLYAR $", label="Satış fiyatı", brand=c, mood="fall"),
         Scene(narration="Asıl ders ise hâlâ çoğu şirketin gözünden kaçıyor.",
               scene_type="quote", text="Asıl ders hâlâ gözden kaçıyor", highlight=["ders"]),
     ]

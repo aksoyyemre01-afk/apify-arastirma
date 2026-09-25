@@ -17,7 +17,25 @@ const clamp = {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'} as const;
 
 // ---------------------------------------------------------------- arka plan
 // Sürekli hareket eden (kural 5) sade seri zemini: kayan gradyan + ızgara + parçacıklar.
-export const Background: React.FC<{tint?: string | null}> = ({tint}) => {
+// Sahne tonu: seri paletinden bir renk, 0-1 arası güç. Zemin yapısı (gradyan, ızgara,
+// parçacıklar) hep aynı kalır, yalnızca üzerine hafif bir renk yıkaması gelir.
+export type Tint = {color: string; strength: number};
+
+const alphaHex = (a: number) =>
+  Math.round(Math.max(0, Math.min(1, a)) * 255)
+    .toString(16)
+    .padStart(2, '0');
+
+const TintLayer: React.FC<{tint: Tint}> = ({tint}) => (
+  <>
+    <AbsoluteFill
+      style={{background: `radial-gradient(circle at 50% 42%, ${tint.color}${alphaHex(0.3 * tint.strength)} 0%, transparent 65%)`}}
+    />
+    <AbsoluteFill style={{background: `${tint.color}${alphaHex(0.08 * tint.strength)}`}} />
+  </>
+);
+
+export const Background: React.FC<{tint?: Tint | null; prevTint?: Tint | null}> = ({tint, prevTint}) => {
   const frame = useCurrentFrame();
   const {palette} = useTheme();
   const gx = 50 + Math.sin(frame / 90) * 25;
@@ -30,11 +48,8 @@ export const Background: React.FC<{tint?: string | null}> = ({tint}) => {
           background: `radial-gradient(circle at ${gx}% ${gy}%, ${palette.background_alt} 0%, ${palette.background} 62%)`,
         }}
       />
-      {tint ? (
-        <AbsoluteFill
-          style={{background: `radial-gradient(circle at 50% 45%, ${tint}33 0%, transparent 60%)`}}
-        />
-      ) : null}
+      {prevTint ? <TintLayer tint={prevTint} /> : null}
+      {tint ? <TintLayer tint={tint} /> : null}
       <AbsoluteFill
         style={{
           backgroundImage: `linear-gradient(${palette.text}0D 2px, transparent 2px), linear-gradient(90deg, ${palette.text}0D 2px, transparent 2px)`,
@@ -75,10 +90,10 @@ export const SceneFrame: React.FC<{
   durationInFrames: number;
   variant: number;
   focus?: {x: number; y: number};
-  // Kamera zoom'undan etkilenmeyen üst başlık (logo çipleri): yakın planda kayıp rozete binmez.
-  header?: React.ReactNode;
+  // Logo çipleri kendi sabit bölgesinde, kamera zoom'undan bağımsız çizilir.
+  chips?: LogoRef[];
   children: React.ReactNode;
-}> = ({durationInFrames, variant, focus, header, children}) => {
+}> = ({durationInFrames, variant, focus, chips = [], children}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const enter = spring({frame, fps, config: {damping: 14, mass: 0.7}});
@@ -98,12 +113,19 @@ export const SceneFrame: React.FC<{
     opacity = exit;
   }
   const origin = focus ? `${focus.x}px ${focus.y}px` : '50% 38%';
+  const clipTop = chips.length ? LAYOUT.sceneClipTopWithChips : LAYOUT.sceneClipTop;
   return (
     <AbsoluteFill>
-      <AbsoluteFill style={{transform: `translateY(${translateY}px) scale(${scale})`, transformOrigin: origin, opacity}}>
-        {children}
+      <AbsoluteFill style={{clipPath: `inset(${clipTop}px 0 0 0)`}}>
+        <AbsoluteFill style={{transform: `translateY(${translateY}px) scale(${scale})`, transformOrigin: origin, opacity}}>
+          {children}
+        </AbsoluteFill>
       </AbsoluteFill>
-      {header ? <AbsoluteFill style={{transform: `translateY(${translateY * 0.5}px)`, opacity}}>{header}</AbsoluteFill> : null}
+      {chips.length ? (
+        <AbsoluteFill style={{opacity}}>
+          <Chips chips={chips} />
+        </AbsoluteFill>
+      ) : null}
       {variant > 0 ? (
         <AbsoluteFill
           style={{background: 'white', opacity: interpolate(frame, [0, 4], [0.35, 0], clamp), pointerEvents: 'none'}}
@@ -192,12 +214,27 @@ export const LogoCard: React.FC<{
 };
 
 // ---------------------------------------------------------------- küçük logo çipleri
-export const Chips: React.FC<{chips: LogoRef[]; top?: number; size?: number}> = ({chips, top = LAYOUT.contentTop, size = 150}) => {
+// Sabit çip bölgesinde (LAYOUT.chipsTop..+chipsHeight) dikeyde ortalanır; rozet
+// bölgesiyle asla çakışmaz. Giriş zıplaması taşmasın diye kart bölgeden %10 küçük.
+export const Chips: React.FC<{chips: LogoRef[]}> = ({chips}) => {
   if (!chips.length) return null;
+  const h = Math.round(LAYOUT.chipsHeight * 0.9);
   return (
-    <div style={{position: 'absolute', top, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 40}}>
+    <div
+      style={{
+        position: 'absolute',
+        top: LAYOUT.chipsTop,
+        height: LAYOUT.chipsHeight,
+        left: 0,
+        right: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 40,
+      }}
+    >
       {chips.map((c, i) => (
-        <LogoCard key={i} logo={c} width={size * 1.9} height={size} delay={2 + i * 3} />
+        <LogoCard key={i} logo={c} width={h * 1.9} height={h} delay={2 + i * 3} />
       ))}
     </div>
   );

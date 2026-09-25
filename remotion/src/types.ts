@@ -28,12 +28,16 @@ export type LogoRef = {
   revealAt: number | null;
 };
 
+// Sahnenin duygusal yönü; zemin tonunu belirler (yükseliş yeşilimsi, düşüş kırmızımsı).
+export type Tone = 'rise' | 'fall' | 'neutral';
+
 type SceneBase = {
   from: number;
   durationInFrames: number;
   variant: number;
   label: string;
   chips: LogoRef[];
+  tone: Tone;
 };
 
 export type LogoIntroScene = SceneBase & {type: 'logo_intro'; logo: LogoRef | null};

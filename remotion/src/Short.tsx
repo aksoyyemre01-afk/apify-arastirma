@@ -9,7 +9,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion';
-import {Background} from './components';
+import {Background, Tint} from './components';
 import {SceneView} from './scenes';
 import {BODY, HEADING, LAYOUT, ThemeProvider, useTheme} from './theme';
 import {CaptionPage, LogoRef, Outro as OutroProps, SceneProps, ShortProps} from './types';
@@ -31,7 +31,12 @@ const shiftScene = (s: SceneProps, lead: number): SceneProps => {
 };
 
 // ---------------------------------------------------------------- altyazı (kural 6)
-// Ses ile kelime senkronu: o an söylenen kelime vurgu renginde ve büyütülmüş.
+// Ses ile kelime senkronu: o an söylenen kelime vurgu renginde ve hafifçe yukarıda.
+// Vurgu kelimenin genişliğini DEĞİŞTİRMEZ (scale yok); kelimeler arasındaki boşluk
+// yazı konturu düşüldükten sonra da her zaman görünür kalır.
+const CAPTION_SIZE = 84;
+const CAPTION_STROKE = 12;
+const CAPTION_WORD_GAP = Math.round(CAPTION_SIZE * 0.34) + CAPTION_STROKE;
 const Caption: React.FC<{page: CaptionPage}> = ({page}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
@@ -56,7 +61,7 @@ const Caption: React.FC<{page: CaptionPage}> = ({page}) => {
           display: 'flex',
           flexWrap: 'wrap',
           justifyContent: 'center',
-          gap: '0 36px',
+          gap: `0 ${CAPTION_WORD_GAP}px`,
           transform: `scale(${interpolate(pop, [0, 1], [0.85, 1])})`,
         }}
       >
@@ -68,12 +73,13 @@ const Caption: React.FC<{page: CaptionPage}> = ({page}) => {
               style={{
                 fontFamily: HEADING,
                 fontWeight: 900,
-                fontSize: 84,
+                fontSize: CAPTION_SIZE,
                 lineHeight: 1.15,
                 color: active ? palette.accent : palette.text,
-                transform: `scale(${active ? 1.08 : 1})`,
+                transform: `translateY(${active ? -6 : 0}px)`,
                 display: 'inline-block',
-                WebkitTextStroke: `14px ${palette.background}`,
+                whiteSpace: 'nowrap',
+                WebkitTextStroke: `${CAPTION_STROKE}px ${palette.background}`,
                 paintOrder: 'stroke fill',
                 textShadow: '0 8px 24px rgba(0,0,0,0.55)',
               }}
@@ -97,7 +103,19 @@ const Badge: React.FC<{text: string; intro: boolean}> = ({text, intro}) => {
   const s = intro ? spring({frame, fps, config: {damping: 15}}) : 1;
   const sweep = intro ? interpolate(frame, [0, 16], [0, 120], clamp) : 120;
   return (
-    <div style={{position: 'absolute', top: LAYOUT.badgeTop, left: 0, right: 0, display: 'flex', justifyContent: 'center'}}>
+    <div
+      style={{
+        position: 'absolute',
+        top: LAYOUT.badgeTop,
+        height: LAYOUT.badgeHeight,
+        left: 0,
+        right: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+      }}
+    >
       <div
         lang="tr"
         style={{
@@ -106,11 +124,12 @@ const Badge: React.FC<{text: string; intro: boolean}> = ({text, intro}) => {
           fontFamily: HEADING,
           fontWeight: 800,
           fontSize: 38,
+          lineHeight: 1.2,
           letterSpacing: 3,
           textTransform: 'uppercase',
           color: palette.card_text,
           background: palette.accent,
-          padding: '12px 30px',
+          padding: '10px 30px',
           borderRadius: 16,
           transform: `translateY(${(1 - s) * -120}px)`,
         }}
@@ -202,12 +221,28 @@ const Inner: React.FC<ShortProps> = (props) => {
   const frame = useCurrentFrame();
   const {palette} = props.theme;
   const active = props.scenes.find((s) => frame >= s.from && frame < s.from + s.durationInFrames);
-  const tint = active?.type === 'chart' ? (active.direction === 'down' ? palette.down : palette.up) : null;
+  // Kural 5 (görsel çeşitlilik): zemin tonu sahneye göre hafifçe değişir, seri paletinin
+  // dışına çıkmaz. Ton geçişi ~10 karede yumuşak yapılır.
+  const toneTint = (s: SceneProps | undefined): Tint | null => {
+    if (!s) return null;
+    if (s.tone === 'rise') return {color: palette.up, strength: 1};
+    if (s.tone === 'fall') return {color: palette.down, strength: 1};
+    if (s.type === 'logo_intro' || s.type === 'big_number') return {color: palette.accent, strength: 0.45};
+    if (s.type === 'timeline' || s.type === 'comparison') return {color: palette.muted, strength: 0.5};
+    return null;
+  };
+  const activeIdx = active ? props.scenes.indexOf(active) : -1;
+  const cur = toneTint(active);
+  const prev = activeIdx > 0 ? toneTint(props.scenes[activeIdx - 1]) : null;
+  const fade = active ? interpolate(frame - active.from, [0, 10], [0, 1], clamp) : 1;
+  const same = cur?.color === prev?.color && cur?.strength === prev?.strength;
+  const tint = cur && !same ? {...cur, strength: cur.strength * fade} : cur;
+  const prevTint = prev && !same ? {...prev, strength: prev.strength * (1 - fade)} : null;
   const outroFrom = props.outro?.from ?? props.durationInFrames;
   const musicFadeFrom = props.durationInFrames - 30;
   return (
     <AbsoluteFill>
-      <Background tint={tint} />
+      <Background tint={tint} prevTint={prevTint} />
       {props.scenes.map((s, i) => {
         // İlk sahne giriş animasyonunun ortasından başlar: videonun ilk karesi (otomatik
         // oynatma/kapak) asla boş olmaz (kural 4).

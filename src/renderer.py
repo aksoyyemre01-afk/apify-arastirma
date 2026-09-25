@@ -105,6 +105,14 @@ def normalize_loudness(video: Path) -> None:
         stats = json.loads(probe.stderr[probe.stderr.rindex("{"):probe.stderr.rindex("}") + 1])
     except ValueError:
         raise RenderError(f"loudnorm ölçümü okunamadı:\n{probe.stderr[-1500:]}")
+    # Sessiz ses (ör. dry-run) -inf ölçülür; yükseltilecek bir şey yok, olduğu gibi bırakılır.
+    try:
+        measured = float(stats["input_i"])
+    except (KeyError, ValueError):
+        measured = float("-inf")
+    if not measured > -70:
+        print(f"      Ses: {stats.get('input_i')} LUFS (sessiz), normalizasyon atlandı")
+        return
     second = (
         f"{base}:measured_I={stats['input_i']}:measured_TP={stats['input_tp']}"
         f":measured_LRA={stats['input_lra']}:measured_thresh={stats['input_thresh']}"

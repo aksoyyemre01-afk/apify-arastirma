@@ -37,7 +37,7 @@ WIDTH = 1080
 HEIGHT = 1920
 
 MAX_SCENE_SECONDS = 3.0
-SPLIT_THRESHOLD = 3.3
+SPLIT_THRESHOLD = 3.0  # hiçbir sahne 3 sn'yi geçmez
 SCENE_LEAD = 0.08  # sahne, ilk kelimesinden hemen önce başlar (animasyon kelimeyle çakışsın)
 REVEAL_DEADLINE = 5.0
 DIRECT_BRAND_DEADLINE = 3.0
@@ -86,32 +86,43 @@ def _clean(text: str, max_words: int, field: str) -> str:
     return text
 
 
-# Karşılaştırmada logo yerine geçemeyecek genel ifadeler (marka değil).
-_GENERIC_SIDES = {
+# Karşılaştırmada taraf olamayacak genel ifadelerin kelimeleri (marka değil).
+_GENERIC_WORDS = {
     _norm(x) for x in (
-        "diğer", "diğerleri", "diğer şirketler", "rakip", "rakipler", "herkes", "kullanıcılar",
-        "pazar", "sektör", "geri kalan", "others", "other", "competitors", "rest",
+        "diğer", "diğerleri", "rakip", "rakipler", "rakibi", "yeni", "herkes", "kullanıcılar",
+        "pazar", "sektör", "şirket", "şirketler", "firma", "geri", "kalan", "others", "other",
+        "competitor", "competitors", "rest", "new",
     )
 }
 
 
-def _fix_generic_comparisons(scenes: list[dict]) -> None:
-    """Bir tarafı marka olmayan karşılaştırma (ör. "X vs Diğer") ekranda anlamsız bir
-    yazı logosu olur; bunun yerine gerçek markanın değerini rakam kartında göster."""
+def _is_generic(name: str) -> bool:
+    words = [_norm(w) for w in (name or "").split() if _norm(w)]
+    return not words or all(w in _GENERIC_WORDS for w in words)
+
+
+def _validate_comparisons(scenes: list[dict], has_logo) -> None:
+    """Kural 1: karşılaştırmanın iki tarafı da gerçek, logosu çekilebilen bir şirket/ürün
+    olmalı. "X vs Yeni rakip" gibi bir taraf genel ifadeyse ya da logosu bulunamıyorsa
+    sahne, geçerli tarafın rakam/logo kartına; iki taraf da geçersizse alıntı kartına döner."""
     for s in scenes:
         if s["scene_type"] != "comparison":
             continue
-        left_generic = _norm(s.get("left_brand", "")) in _GENERIC_SIDES
-        right_generic = _norm(s.get("right_brand", "")) in _GENERIC_SIDES
-        if not (left_generic or right_generic) or (left_generic and right_generic):
+        sides = [(s.get("left_brand", ""), s.get("left_value", "")), (s.get("right_brand", ""), s.get("right_value", ""))]
+        valid = [(b, v) for b, v in sides if not _is_generic(b) and has_logo(b)]
+        if len(valid) == 2:
             continue
-        brand, value = (s["right_brand"], s.get("right_value", "")) if left_generic else (s["left_brand"], s.get("left_value", ""))
-        print(f"      [Kural 1] '{s['left_brand']} vs {s['right_brand']}' marka karşılaştırması değil; rakam kartına çevrildi.")
-        s.update(left_brand="", right_brand="", left_value="", right_value="", brand=brand)
-        if value:
-            s.update(scene_type="big_number", value=value, unit="")
+        print(f"      [Kural 1] '{sides[0][0]} vs {sides[1][0]}': gerçek/logolu iki taraf yok, sahne dönüştürüldü.")
+        s.update(left_brand="", right_brand="", left_value="", right_value="", highlight_side="none")
+        if valid:
+            brand, value = valid[0]
+            s["brand"] = brand
+            if value:
+                s.update(scene_type="big_number", value=value, unit="")
+            else:
+                s.update(scene_type="logo_intro")
         else:
-            s.update(scene_type="logo_intro")
+            s.update(scene_type="quote", text="", highlight=[])
 
 
 def _frame(t: float) -> int:
@@ -270,7 +281,7 @@ def _enforce_min_durations(segs: list[dict], reveal_t: float | None) -> None:
 
 # --------------------------------------------------------------------------- bölme / props
 
-def _split_long(segs: list[dict]) -> list[dict]:
+def _split_long(segs: list[dict], timings: list[dict], main_brand: str) -> list[dict]:
     out = []
     for seg in segs:
         dur = seg["end"] - seg["start"]
@@ -279,12 +290,76 @@ def _split_long(segs: list[dict]) -> list[dict]:
             continue
         n = math.ceil(dur / MAX_SCENE_SECONDS)
         step = dur / n
+        alts = _alternates(seg["scene"], main_brand)
         for k in range(n):
-            part = dict(seg)
-            part["start"] = seg["start"] + k * step
-            part["end"] = seg["start"] + (k + 1) * step
-            part["variant"] = seg.get("variant", 0) + k
+            start, end = seg["start"] + k * step, seg["start"] + (k + 1) * step
+            part = dict(seg, start=start, end=end)
+            if k % 2 == 0:
+                # Orijinal sahne; tekrar ediyorsa yakın plan varyantıyla.
+                part["variant"] = seg.get("variant", 0) + k // 2
+            else:
+                alt = dict(seg["scene"], **alts[(k // 2) % len(alts)], reveal=False)
+                if alt["scene_type"] == "quote" and not alt.get("text"):
+                    alt["text"] = _spoken_text(timings, start, end) or seg["scene"]["narration"]
+                    alt["highlight"] = _pick_highlight(alt["text"])
+                elif alt["scene_type"] == "logo_intro" and not alt.get("label"):
+                    alt["label"] = _spoken_text(timings, start, end, max_words=5)
+                part.update(scene=alt, variant=0)
             out.append(part)
+    return out
+
+
+def _spoken_text(timings: list[dict], start: float, end: float, max_words: int = 8) -> str:
+    """[start, end) aralığında seslendirilen kelimeler (sahnenin o anki cümle parçası)."""
+    words = [w["word"] for w in timings if start - 0.05 <= w["start"] < end]
+    return " ".join(words[:max_words]).strip(" ,;:.")
+
+
+def _pick_highlight(text: str) -> list[str]:
+    words = [w.strip(".,!?;:\"'") for w in text.split()]
+    with_digit = [w for w in words if any(ch.isdigit() for ch in w)]
+    if with_digit:
+        return with_digit[:1]
+    longest = max(words, key=len, default="")
+    return [longest] if len(longest) >= 4 else []
+
+
+def _split_value(value: str) -> tuple[str, str] | None:
+    """'4,8 MİLYAR $' -> ('4,8', 'MİLYAR $')."""
+    m = re.match(r"^\s*([-+]?%?[\d.,]+%?)\s*(.*)$", value or "")
+    return (m.group(1), m.group(2).strip()) if m else None
+
+
+def _alternates(sc: dict, main_brand: str) -> list[dict]:
+    """Kural 5: 3 sn'yi aşan bir sahnenin ikinci yarısı için FARKLI tipte, aynı cümleyi
+    gösteren sahne adayları (öncelik sırasıyla). Alanlar sahnenin kendi verisinden ya da
+    o anda seslendirilen kelimelerden gelir; hiçbir konuya özgü değildir."""
+    t = sc["scene_type"]
+    brand = sc.get("brand") or ""
+    out: list[dict] = []
+    if t == "big_number":
+        if brand:
+            out.append({"scene_type": "logo_intro", "brand": brand,
+                        "label": " ".join(x for x in (sc.get("value", ""), sc.get("unit", "")) if x)})
+    elif t == "chart":
+        parsed = _split_value(sc.get("end_value", ""))
+        if parsed:
+            out.append({"scene_type": "big_number", "value": parsed[0], "unit": parsed[1]})
+    elif t == "comparison":
+        side = sc.get("highlight_side")
+        pick = (sc.get("right_brand"), sc.get("right_value")) if side == "right" else (sc.get("left_brand"), sc.get("left_value"))
+        if pick[0]:
+            out.append({"scene_type": "logo_intro", "brand": pick[0], "label": pick[1] or ""})
+    elif t == "timeline":
+        if brand:
+            out.append({"scene_type": "logo_intro", "brand": brand, "label": sc.get("year", "")})
+    elif t == "quote":
+        if brand or main_brand:
+            out.append({"scene_type": "logo_intro", "brand": brand or main_brand, "label": ""})
+    if t != "quote":
+        out.append({"scene_type": "quote", "text": "", "highlight": [], "label": ""})
+    if not out:
+        out.append({"scene_type": "logo_intro", "brand": main_brand, "label": ""})
     return out
 
 
@@ -328,6 +403,30 @@ def _mask(text: str, brand: str, seg: dict, reveal_t: float | None) -> str:
     return re.sub(re.escape(brand.split()[0]), "???", text, flags=re.IGNORECASE)
 
 
+# mood alanı olmayan (eski) script'ler için cümleden yön tahmini: Türkçe kök eşleşmesi.
+_RISE_STEMS = ("zirve", "rekor", "yüksel", "büyü", "lider", "kral", "patlama", "arttı", "artış",
+               "başarı", "ulaştı", "ulaşmıştı", "devleş", "hükmed")
+_FALL_STEMS = ("düştü", "düşüş", "düşer", "çök", "eridi", "eriy", "kaybet", "kayıp", "iflas", "batt",
+               "redde", "geri çevir", "kapandı", "kapat", "küçül", "zarar", "kriz", "çakıl", "satıl")
+
+
+def _tone(s: dict) -> str:
+    """Kural 5 (çeşitlilik): sahnenin zemin tonu - 'rise', 'fall' ya da 'neutral'."""
+    if s.get("mood") in ("rise", "fall"):
+        return s["mood"]
+    if s["scene_type"] == "chart" and s.get("direction") in ("up", "down"):
+        return "rise" if s["direction"] == "up" else "fall"
+    words = [w.replace("I", "ı").replace("İ", "i").lower() for w in (s.get("narration") or "").split()]
+    text = " ".join(words)
+    fall = any(w.startswith(st) for w in words for st in _FALL_STEMS if " " not in st) or any(
+        st in text for st in _FALL_STEMS if " " in st
+    )
+    rise = any(w.startswith(st) for w in words for st in _RISE_STEMS)
+    if fall != rise:
+        return "fall" if fall else "rise"
+    return "neutral"
+
+
 def _scene_props(seg: dict, reg: _LogoRegistry, mystery: str, reveal_t: float | None) -> dict:
     s = seg["scene"]
     mkey = _norm(mystery) if mystery else ""
@@ -343,6 +442,7 @@ def _scene_props(seg: dict, reg: _LogoRegistry, mystery: str, reveal_t: float | 
         "variant": seg.get("variant", 0),
         "label": txt("label", 6),
         "chips": [],
+        "tone": _tone(s),
     }
 
     chip_names = []
@@ -458,7 +558,8 @@ def build_props(
     if not raw:
         raise PlanError("script.json'da 'scenes' yok (eski format). build_video.py --migrate ile dönüştür.")
     scenes = [Scene.model_validate(s).model_dump() for s in raw]
-    _fix_generic_comparisons(scenes)
+    reg = _LogoRegistry(offline_logos)
+    _validate_comparisons(scenes, lambda b: reg.src(b) is not None)
     if not timings:
         raise PlanError("kelime zamanlamaları boş")
 
@@ -479,9 +580,8 @@ def build_props(
         _apply_direct(segs, script)
 
     _enforce_min_durations(segs, reveal_t)
-    segs = _split_long(segs)
+    segs = _split_long(segs, timings, (script.get("main_brand") or script.get("company") or "").strip())
 
-    reg = _LogoRegistry(offline_logos)
     scene_props = [_scene_props(seg, reg, mystery, reveal_t) for seg in segs]
 
     # Kural 8: ses efektleri (dosya varsa).

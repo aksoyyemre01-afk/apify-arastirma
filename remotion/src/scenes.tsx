@@ -1,6 +1,6 @@
 import React from 'react';
 import {AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig} from 'remotion';
-import {Chips, Counter, Label, LogoCard, SceneFrame, fitFont} from './components';
+import {Counter, Label, LogoCard, SceneFrame, fitFont} from './components';
 import {BODY, HEADING, LAYOUT} from './theme';
 import {useTheme} from './theme';
 import {
@@ -21,7 +21,7 @@ const Body: React.FC<{hasChips: boolean; children: React.ReactNode; gap?: number
   <div
     style={{
       position: 'absolute',
-      top: hasChips ? LAYOUT.contentTop + 190 : LAYOUT.contentTop,
+      top: hasChips ? LAYOUT.contentTopWithChips : LAYOUT.contentTop,
       bottom: 1920 - LAYOUT.contentBottom,
       left: LAYOUT.sidePadding,
       right: LAYOUT.sidePadding,
@@ -96,7 +96,7 @@ const LogoIntro: React.FC<{s: LogoIntroScene}> = ({s}) => {
   const frame = useCurrentFrame();
   const sweep = interpolate(frame, [6, 30], [-60, 160], clamp);
   return (
-    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} header={<Chips chips={s.chips} />}>
+    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
       <Body hasChips={s.chips.length > 0} gap={60}>
         {s.logo ? (
           <div style={{position: 'relative'}}>
@@ -125,7 +125,7 @@ const BigNumber: React.FC<{s: BigNumberScene}> = ({s}) => {
   const numberSize = fitFont(s.value, CONTENT_W, 300, 0.64);
   const unitSize = fitFont(s.unit, CONTENT_W, 118, 0.7);
   return (
-    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} header={<Chips chips={s.chips} />}>
+    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
       <Body hasChips={s.chips.length > 0} gap={10}>
         <Pop>
           <div
@@ -197,7 +197,7 @@ const Comparison: React.FC<{s: ComparisonScene}> = ({s}) => {
   };
   const focusX = s.variant > 0 && s.highlight ? (s.highlight === 'left' ? 380 : 700) : 540;
   return (
-    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} focus={{x: focusX, y: 700}} header={<Chips chips={s.chips} />}>
+    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} focus={{x: focusX, y: 700}} chips={s.chips}>
       <Body hasChips={s.chips.length > 0} gap={70}>
         {s.label ? <StaggerText text={s.label} size={62} weight={800} /> : null}
         <div style={{display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 20, width: 1080}}>
@@ -237,7 +237,7 @@ const Timeline: React.FC<{s: TimelineScene}> = ({s}) => {
   const draw = interpolate(frame, [0, 22], [0, 100], clamp);
   const dotPulse = 1 + Math.sin(frame / 4) * 0.12;
   return (
-    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} header={<Chips chips={s.chips} />}>
+    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
       <Body hasChips={s.chips.length > 0} gap={50}>
         <Pop>
           <div style={{fontFamily: HEADING, fontWeight: 900, fontSize: fitFont(s.year, CONTENT_W, 250, 0.66), color: palette.accent, lineHeight: 1}}>
@@ -291,18 +291,19 @@ const Chart: React.FC<{s: ChartScene}> = ({s}) => {
   const end = pts[pts.length - 1];
   const endShown = progress >= 0.98;
   const arrow = s.direction === 'down' ? '▼' : '▲';
-  const chartTop = s.chips.length ? LAYOUT.contentTop + 330 : LAYOUT.contentTop + 170;
+  const bodyTop = s.chips.length ? LAYOUT.contentTopWithChips : LAYOUT.contentTop;
+  const chartTop = bodyTop + 150;
   return (
     <SceneFrame
       durationInFrames={s.durationInFrames}
       variant={s.variant}
       focus={{x: LAYOUT.sidePadding + end.x, y: chartTop + end.y}}
-      header={<Chips chips={s.chips} />}
+      chips={s.chips}
     >
       <div
         style={{
           position: 'absolute',
-          top: s.chips.length ? LAYOUT.contentTop + 190 : LAYOUT.contentTop + 20,
+          top: bodyTop + 20,
           left: LAYOUT.sidePadding,
           right: LAYOUT.sidePadding,
           display: 'flex',
@@ -348,7 +349,7 @@ const Chart: React.FC<{s: ChartScene}> = ({s}) => {
           lang="tr"
           style={{
             position: 'absolute',
-            top: Math.max(chartTop + end.y - 150, LAYOUT.contentTop + 120),
+            top: Math.max(chartTop + end.y - 150, bodyTop + 110),
             right: LAYOUT.sidePadding - 10,
             background: color,
             color: '#FFFFFF',
@@ -375,7 +376,7 @@ const Quote: React.FC<{s: QuoteScene}> = ({s}) => {
   const words = s.text.split(/\s+/).length;
   const size = words <= 4 ? 110 : words <= 7 ? 92 : 80;
   return (
-    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} header={<Chips chips={s.chips} />}>
+    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
       <Body hasChips={s.chips.length > 0} gap={30}>
         <div style={{fontFamily: HEADING, fontWeight: 900, fontSize: 200, lineHeight: 0.6, color: palette.accent, opacity: 0.9, height: 90}}>“</div>
         <StaggerText text={s.text} size={size} highlight={s.highlight} delay={s.variant > 0 ? -30 : 0} />

@@ -62,9 +62,13 @@ SCENE_RULES = """Sahne kuralları (RULES.md kural 1, 5, 10 - ÇOK ÖNEMLİ):
   * cümlede yükseliş/düşüş/erime anlatılıyorsa -> chart (direction + points + end_value)
   * bir marka tanıtılıyor/açığa çıkıyorsa -> logo_intro (brand + kısa label)
   * hiçbiri yoksa -> quote (cümlenin özü, en fazla 8 kelime, 1-2 highlight kelimesi)
-- comparison'ın iki tarafı da GERÇEK marka/şirket/kurum adı olmalı; "diğer", "rakipler",
-  "herkes" gibi genel ifadeler kullanma. Oran/pay anlatılıyorsa big_number kullan
-  (ör. value "%50", label "İnternet kullanıcılarının payı").
+- comparison'ın iki tarafı da ZORUNLU olarak GERÇEK şirket ya da ürün adıdır (logosu otomatik
+  çekilir; ör. "Apple", "iPhone", "Microsoft"). "yeni rakip", "diğerleri", "rakipler",
+  "herkes", "pazar" gibi genel ifadeler YASAK. Karşı taraf cümlede adıyla geçmiyorsa ama
+  gerçekte biliniyorsa gerçek adını yaz; bilinmiyorsa comparison kullanma. Oran/pay
+  anlatılıyorsa big_number kullan (ör. value "%50", label "İnternet kullanıcılarının payı").
+- Her sahnenin mood'unu belirle: rise (zirve/büyüme/başarı), fall (düşüş/kayıp/kriz/kötü
+  karar) ya da neutral. Zemin tonu buna göre değişir.
 - quote.text cümlenin KENDİ kelimelerinden kısaltılmış olmalı; cümlede olmayan yeni bir
   yorum/hüküm ekleme.
 - Aynı sahne tipini art arda 2'den fazla kullanma; çeşitlilik tempoyu yükseltir.

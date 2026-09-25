@@ -5,11 +5,24 @@ import {Theme} from './types';
 export const HEADING = "'SeriesHeading', 'Montserrat', 'Segoe UI', sans-serif";
 export const BODY = "'SeriesBody', 'Inter', 'Segoe UI', sans-serif";
 
-// Ekran bölgeleri (1080x1920). Alt ~%20 YouTube arayüzünün altında kalır;
-// sahne içeriği CONTENT bandında, altyazı CAPTION bandında durur.
+// Sabit, birbiriyle çakışmayan ekran bölgeleri (1080x1920), yukarıdan aşağı:
+//   rozet 56-132 | logo çipleri 168-298 | sahne içeriği 170/340-1200 | altyazı 1250-1510
+// Alt ~%20 YouTube arayüzünün altında kalır. Sahne katmanı (zoom dahil) rozet ve
+// çip bölgelerine taşamaz: SceneFrame üst kenarı kırpar.
+const BADGE_TOP = 56;
+const BADGE_HEIGHT = 76;
+const CHIPS_TOP = 168;
+const CHIPS_HEIGHT = 130;
 export const LAYOUT = {
-  badgeTop: 70,
-  contentTop: 200,
+  badgeTop: BADGE_TOP,
+  badgeHeight: BADGE_HEIGHT,
+  chipsTop: CHIPS_TOP,
+  chipsHeight: CHIPS_HEIGHT,
+  // Sahne katmanının görünür üst sınırı (çip varsa/yoksa).
+  sceneClipTopWithChips: CHIPS_TOP + CHIPS_HEIGHT + 16,
+  sceneClipTop: BADGE_TOP + BADGE_HEIGHT + 16,
+  contentTopWithChips: 340,
+  contentTop: 170,
   contentBottom: 1200,
   captionTop: 1250,
   captionHeight: 260,

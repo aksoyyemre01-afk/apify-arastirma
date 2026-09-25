@@ -81,6 +81,11 @@ class Scene(BaseModel):
     highlight: list[str] = Field(
         default_factory=list, description="quote: text içinden vurgulanacak 1-2 kelime (birebir aynı yazımla)."
     )
+    mood: Literal["neutral", "rise", "fall"] = Field(
+        default="neutral",
+        description="Cümlenin yönü: rise=zirve/büyüme/başarı, fall=düşüş/kayıp/kriz/kötü karar, "
+        "neutral=ikisi de değil. Zemin tonunu belirler.",
+    )
     reveal: bool = Field(
         default=False,
         description="Gizemli hook'ta cevap olan markanın açığa çıktığı sahne ise true (sadece bir sahnede).",

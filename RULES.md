@@ -22,10 +22,14 @@ Cümlede rakam varsa rakam kartı, iki taraf varsa karşılaştırma, yıl varsa
 çizelgesi, yükseliş/düşüş varsa grafik gösterilir. Gerçek şirket logoları her
 zaman düz, açık renkli bir kart üzerinde ve tamamı görünecek şekilde çizilir;
 logo bulunamazsa marka adı düzgün bir yazı logosu olur (bozuk/kırpık logo asla).
+Karşılaştırma kartının iki tarafı da logosu çekilebilen gerçek bir şirket/ürün
+olmak zorundadır; "yeni rakip", "diğerleri" gibi genel ifadeler yasaktır. Bir taraf
+geçersizse sahne geçerli tarafın rakam/logo kartına, ikisi de geçersizse alıntı
+kartına dönüşür.
 
 **Uygulama:** `src/schemas.py` (`Scene`), `src/script_writer.py` (`SCENE_RULES`),
 `src/scene_planner.py` (`_align_scene_starts` sahneyi kelime zamanlamalarına
-hizalar), `src/logos.py` (Wikidata resmi logo özelliği P154; elle konan
+hizalar; `_validate_comparisons`), `src/logos.py` (Wikidata resmi logo özelliği P154; elle konan
 `assets/logos/<marka>.svg|png` önceliklidir; etiket eşleşmesi zorunlu, yanlış
 şirketin logosu gelmez), `remotion/src/components.tsx` (`LogoCard`).
 
@@ -65,21 +69,34 @@ bırakır; outro kartında gösterilir.
 
 ## 5. Her sahne 2-3 saniye, sürekli hareket
 
-Script her sahneyi 5-10 kelime (~2-3 sn) tutar. 3,3 sn'yi aşan sahneler
-otomatik olarak görsel varyantlara (kamera kesmesi + yakın plan) bölünür; 1 sn'den
-kısa sahneler komşusundan süre alır. Her sahnede animasyonlu giriş, sürekli
+Script her sahneyi 5-10 kelime (~2-3 sn) tutar. **Hiçbir sahne 3 sn'yi geçmez:**
+daha uzun bir sahne parçalara bölünür ve ikinci parça FARKLI bir sahne tipidir
+(rakam kartı → markanın logo kartı, grafik → son değerin rakam kartı, karşılaştırma →
+vurgulanan tarafın logosu, diğerleri → o anda söylenen kelimelerin alıntı kartı).
+1 sn'den kısa sahneler komşusundan süre alır. Her sahnede animasyonlu giriş, sürekli
 yavaş zoom, sayaç efekti (rakam ve yıllar), çizilen grafikler ve hareketli zemin
 vardır; ekran hiç durağan kalmaz.
 
-**Uygulama:** `src/scene_planner.py` (`_split_long`, `_enforce_min_durations`),
-`remotion/src/components.tsx` (`SceneFrame`, `Counter`, `Background`),
-`remotion/src/scenes.tsx`.
+Görsel çeşitlilik: zemin tonu sahneye göre hafifçe değişir (yükseliş/zirve
+yeşilimsi, düşüş/kayıp kırmızımsı, rakam/logo kartları vurgu rengi, zaman çizelgesi
+ve karşılaştırma nötr ton); renkler seri paletinden gelir, zemin yapısı aynı kalır.
+Ton, Gemini'nin her sahne için ürettiği `mood` alanından; yoksa grafik yönünden ya da
+cümledeki yükseliş/düşüş köklerinden belirlenir.
+
+Sabit ekran bölgeleri: rozet (56-132 px), logo çipleri (168-298 px), sahne içeriği,
+altyazı (1250-1510 px). Sahne katmanı zoom'da bile rozet/çip bölgesine taşamaz.
+
+**Uygulama:** `src/scene_planner.py` (`_split_long`, `_alternates`,
+`_enforce_min_durations`, `_tone`), `remotion/src/theme.tsx` (`LAYOUT`),
+`remotion/src/components.tsx` (`SceneFrame`, `Chips`, `Counter`, `Background`),
+`remotion/src/Short.tsx`, `remotion/src/scenes.tsx`.
 
 ## 6. Senkron, büyük, kelime vurgulu altyazı
 
 Altyazı ElevenLabs'in kelime zamanlamalarından (`word_timings.json`) üretilir,
 en fazla 3 kelimelik sayfalar halinde büyük fontla gösterilir; o an söylenen
-kelime vurgu renginde ve hafif büyütülmüştür. Altyazı YouTube arayüzünün
+kelime vurgu renginde ve hafifçe yukarıdadır. Vurgu kelimenin genişliğini
+değiştirmez; kelime aralıkları her durumda korunur. Altyazı YouTube arayüzünün
 kapattığı alt bölgenin üstündedir. Ayrıca `captions.srt` yazılır.
 
 **Uygulama:** `src/scene_planner.py` (`_captions`), `remotion/src/Short.tsx` (`Caption`).
