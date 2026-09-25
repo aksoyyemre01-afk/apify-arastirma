@@ -83,7 +83,44 @@ def render(video_dir: Path, part_info: dict | None = None, offline_logos: bool =
     result = subprocess.run(cmd, cwd=REMOTION_DIR, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if result.returncode != 0 or not out.exists():
         raise RenderError(f"Remotion render başarısız:\n{result.stdout[-3000:]}\n{result.stderr[-3000:]}")
+    normalize_loudness(out)
     return out
+
+
+# ElevenLabs çıktısı ~-24 LUFS geliyor; YouTube/telefonlar ~-14 LUFS bekler. Normalize
+# edilmezse video diğer içeriklere göre ~10 LU kısık (neredeyse sessiz) duyulur.
+TARGET_LUFS = -14.0
+TARGET_TRUE_PEAK = -1.5
+TARGET_LRA = 11.0
+
+
+def normalize_loudness(video: Path) -> None:
+    """Videonun sesini iki geçişli loudnorm ile TARGET_LUFS'a getirir (görüntü kopyalanır)."""
+    base = f"loudnorm=I={TARGET_LUFS}:TP={TARGET_TRUE_PEAK}:LRA={TARGET_LRA}"
+    probe = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-i", str(video), "-map", "0:a", "-af", f"{base}:print_format=json", "-f", "null", "-"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    try:
+        stats = json.loads(probe.stderr[probe.stderr.rindex("{"):probe.stderr.rindex("}") + 1])
+    except ValueError:
+        raise RenderError(f"loudnorm ölçümü okunamadı:\n{probe.stderr[-1500:]}")
+    second = (
+        f"{base}:measured_I={stats['input_i']}:measured_TP={stats['input_tp']}"
+        f":measured_LRA={stats['input_lra']}:measured_thresh={stats['input_thresh']}"
+        f":offset={stats['target_offset']}:linear=true"
+    )
+    tmp = video.with_name(video.stem + ".norm.mp4")
+    result = subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-map", "0:v", "-map", "0:a", "-c:v", "copy",
+         "-af", f"{second},aresample=48000", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(tmp)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    if result.returncode != 0:
+        tmp.unlink(missing_ok=True)
+        raise RenderError(f"ses normalizasyonu başarısız:\n{result.stderr[-1500:]}")
+    tmp.replace(video)
+    print(f"      Ses: {float(stats['input_i']):.1f} LUFS -> {TARGET_LUFS:.0f} LUFS")
 
 
 def extract_frames(video: Path, dest_dir: Path, every_seconds: float = 2.0) -> list[Path]:

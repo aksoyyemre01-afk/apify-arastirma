@@ -97,9 +97,11 @@ Metin alanları boş bırakılabilir: seri adı boşsa video rozetsiz üretilir.
 `assets/audio/` içinde `music.mp3`, `whoosh.mp3`, `impact.mp3` varsa kullanılır:
 müzik tüm videoda düşük seviyede, whoosh sahne geçişlerinde, impact reveal
 anında ve düşüş grafiklerinde. Dosya yoksa o katman sessizce atlanır.
+Render'dan sonra ses -14 LUFS'a (true peak -1,5 dBTP) normalize edilir; ElevenLabs
+çıktısı ~-24 LUFS geldiği için normalizasyonsuz video neredeyse sessiz duyulur.
 
 **Uygulama:** `src/scene_planner.py` (sfx listesi), `remotion/src/Short.tsx`,
-`assets/audio/README.md`.
+`src/renderer.py` (`normalize_loudness`), `assets/audio/README.md`.
 
 ## 9. Haftalık plan
 
