@@ -1,22 +1,26 @@
-"""Business Stories otomasyonu - ana çalıştırma script'i.
+"""Short video otomasyonu - ana çalıştırma script'i.
 
-RULES.md kural 8'i uygular: --mode weekly artık TEK bir konuyu 3 short'a böler
-(Pazartesi: giriş/kuruluş, Çarşamba: zirve/kritik hata, Cuma: çöküş/sonuç) ve
-hafta sonu bu 3 bölümü sentezleyen 1 uzun video üretir - 4 farklı konu değil.
---mode shorts / --mode long, ad-hoc/tekil test çalıştırmaları için eskisi gibi
-bağımsız konularla çalışmaya devam eder.
+Akış: konu araştırma -> Gemini (script + her cümlenin sahne yapısı, TEK istek)
+-> ElevenLabs (audio.mp3 + word_timings.json) -> Remotion (video.mp4).
+
+RULES.md kural 9: --mode weekly TEK bir konuyu 3 short'a böler (Pazartesi /
+Çarşamba / Cuma) ve hafta sonu için 1 uzun video script'i üretir (uzun videonun
+render'ı ikinci aşamada).
 
 Kullanım:
-    python run.py --mode weekly               # haftalık 3+1 seri üretir (gerçek API çağrılarıyla)
-    python run.py --mode weekly --dry-run      # API çağrısı yapmadan, sahte içerikle boru hattını test eder
-    python run.py --mode weekly --skip-tts     # senaryoları üretir ama ElevenLabs ile seslendirme yapmaz
-    python run.py --mode shorts --shorts-count 1   # ad-hoc: tek, bağımsız bir short üret (test için)
-    python run.py --mode long                 # ad-hoc: bağımsız bir uzun video üret
+    python run.py --mode weekly                 # haftalık 3 short + 1 uzun script (gerçek API)
+    python run.py --mode weekly --dry-run       # API çağrısı yok, sahte içerikle boru hattı + render testi
+    python run.py --mode shorts --shorts-count 1
+    python run.py --mode shorts --dry-run --topic kodak   # belirli bir konuyla dry-run render
+    python run.py --mode long
+    --skip-tts : seslendirme yapma   --no-video : video render etme
 """
 
 import argparse
 import json
 import os
+import subprocess
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -25,29 +29,51 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from src import research, state  # noqa: E402
-from src.schemas import LongChapter, LongScript, ShortBeat, ShortScript  # noqa: E402
+from src.schemas import LongChapter, LongScript, Scene, ShortScript  # noqa: E402
 from src.utils import slugify  # noqa: E402
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 OUTPUT_DIR = Path("output")
 
 
-def _dry_run_short(topic: dict) -> ShortScript:
+# --------------------------------------------------------------------------- dry-run içerikleri
+# Konudan bağımsız şablon: şirket adı topic'ten gelir; tüm sahne tiplerini,
+# gizemli hook + reveal'ı, logosu bulunamayan bir tarafı (yazı logosu) ve 3 sn'den
+# uzun bir sahnenin bölünmesini test eder. Ekrana çıkan metinlerde "[DRY RUN]" yoktur
+# (kural 10); sahte olduğu başlıkta ve klasör adında belirtilir.
+def _dry_run_short(topic: dict, suffix: str = "") -> ShortScript:
+    c = topic.get("company") or "Şirket"
+    scenes = [
+        Scene(narration="Tek bir kararla milyarlarca dolar kaybeden şirketi biliyor musunuz?",
+              scene_type="big_number", value="10", unit="MİLYAR $", label="Tek kararın bedeli"),
+        Scene(narration=f"Cevap: {c}.", scene_type="logo_intro", brand=c, reveal=True),
+        Scene(narration=f"{c}, 1998 yılında pazarın açık ara lideriydi.",
+              scene_type="timeline", year="1998", text="Pazarın açık ara lideri", brand=c),
+        Scene(narration="Şirketin değeri 250 milyar dolara ulaştı.",
+              scene_type="big_number", value="250", unit="MİLYAR $", label="Piyasa değeri", brand=c),
+        Scene(narration="Sonra yepyeni bir rakip sahneye çıktı.",
+              scene_type="comparison", left_brand=c, right_brand="Yeni rakip",
+              left_value="LİDER", right_value="YENİ", highlight_side="right"),
+        Scene(narration="Satışlar sadece birkaç yıl içinde çakıldı.",
+              scene_type="chart", direction="down", points=[100, 92, 60, 31, 12],
+              point_labels=["2007", "2008", "2009", "2010", "2011"], end_value="-%88", brand=c),
+        Scene(narration="Yönetim değişime bir türlü ayak uyduramadı.",
+              scene_type="quote", text="Değişime ayak uyduramadı", highlight=["Değişime"]),
+        Scene(narration="Sonunda şirket, zirvedeki değerinin çok küçük bir kısmına, yalnızca 7 milyar dolara satıldı.",
+              scene_type="big_number", value="7", unit="MİLYAR $", label="Satış fiyatı", brand=c),
+        Scene(narration="Asıl ders ise hâlâ çoğu şirketin gözünden kaçıyor.",
+              scene_type="quote", text="Asıl ders hâlâ gözden kaçıyor", highlight=["ders"]),
+    ]
     return ShortScript(
-        title=f"[DRY RUN] {topic['title']}",
-        hook=ShortBeat(
-            narration="[DRY RUN] Bu bir örnek açılış cümlesidir.",
-            visual_notes=["[DRY RUN] açılış sahnesi"],
-        ),
-        setup=ShortBeat(
-            narration=f"[DRY RUN] {topic['title']} hakkında örnek bir kuruluş metni. "
-            "Gerçek çalıştırmada bu metin Gemini tarafından üretilecek.",
-            visual_notes=["[DRY RUN] kuruluş sahnesi 1", "[DRY RUN] kuruluş sahnesi 2"],
-        ),
-        twist=ShortBeat(
-            narration="[DRY RUN] Örnek dramatik an / twist metni.",
-            visual_notes=["[DRY RUN] dramatik sahne 1 (kırmızı/kriz)", "[DRY RUN] dramatik sahne 2 (kırmızı/kriz)"],
-        ),
-        cta="[DRY RUN] Takip etmeyi unutma!",
+        title=f"[DRY RUN] {topic['title']}{suffix}",
+        main_brand=c,
+        hook_type="mystery",
+        mystery_brand=c,
+        reveal_by_seconds=5,
+        scenes=scenes,
+        cta="Asıl hatayı bir sonraki bölümde anlatıyoruz",
         hashtags=["#dryrun", "#test"],
     )
 
@@ -55,73 +81,91 @@ def _dry_run_short(topic: dict) -> ShortScript:
 def _dry_run_long(topic: dict) -> LongScript:
     return LongScript(
         title=f"[DRY RUN] {topic['title']}",
-        hook="[DRY RUN] Uzun video için örnek açılış.",
+        main_brand=topic.get("company", ""),
+        hook="Uzun video için örnek açılış.",
         chapters=[
-            LongChapter(heading="Giriş", narration="[DRY RUN] örnek giriş metni."),
-            LongChapter(heading="Kritik Hata", narration="[DRY RUN] örnek gelişme metni."),
-            LongChapter(heading="Dersler", narration="[DRY RUN] örnek kapanış ve ders metni."),
+            LongChapter(heading="Giriş", narration="Örnek giriş metni."),
+            LongChapter(heading="Kritik Hata", narration="Örnek gelişme metni."),
+            LongChapter(heading="Dersler", narration="Örnek kapanış ve ders metni."),
         ],
-        cta="[DRY RUN] Abone olmayı unutma!",
+        cta="Abone olmayı unutma!",
         hashtags=["#dryrun", "#test"],
     )
 
 
-_BEAT_LABELS = {
-    "hook": "Hook (0-3 sn)",
-    "setup": "Kuruluş",
-    "twist": "Dramatik An / Twist",
-}
+def _silent_audio_with_timings(text: str, video_dir: Path) -> None:
+    """dry-run: ses yerine tahmini süreli sessiz bir mp3 ve tahmini kelime zamanlamaları."""
+    from src import subtitles
+
+    duration = max(len(text.split()) * 0.42, 3.0)
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+         "-t", f"{duration:.2f}", "-q:a", "9", str(video_dir / "audio.mp3")],
+        check=True,
+    )
+    timings = subtitles.estimate_word_timings(text, duration)
+    (video_dir / "word_timings.json").write_text(json.dumps(timings, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _write_short(topic: dict, script: ShortScript, out_dir: Path, do_tts: bool, prefix: str = "") -> Path:
-    video_dir = out_dir / f"short-{prefix}{slugify(script.title)}"
-    video_dir.mkdir(parents=True, exist_ok=True)
+# --------------------------------------------------------------------------- yazma / render
 
-    beats = [("hook", script.hook), ("setup", script.setup), ("twist", script.twist)]
-    full_narration = " ".join(beat.narration for _, beat in beats)
-
-    md_lines = [
+def _script_md(topic: dict, script: ShortScript) -> str:
+    lines = [
         f"# {script.title}",
         "",
         f"**Kaynak konu:** {topic['title']} ({topic.get('source', '')})",
+        f"**Ana marka:** {script.main_brand} · **Hook:** {script.hook_type}"
+        + (f" (gizli marka: {script.mystery_brand}, reveal ≤ {script.reveal_by_seconds:g} sn)" if script.hook_type == "mystery" else ""),
         "",
+        "| # | Cümle | Sahne | İçerik |",
+        "|---|---|---|---|",
     ]
-    for name, beat in beats:
-        md_lines += [
-            f"## {_BEAT_LABELS[name]}",
-            "",
-            beat.narration,
-            "",
-            "**Görsel Notlar:**",
-            "",
-            *[f"- {v}" for v in beat.visual_notes],
-            "",
-        ]
-    md_lines += [
-        f"**CTA (ekranda, seslendirilmez):** {script.cta}",
-        "",
-        f"**Hashtags:** {' '.join(script.hashtags)}",
-        "",
-    ]
-    (video_dir / "script.md").write_text("\n".join(md_lines), encoding="utf-8")
+    for i, s in enumerate(script.scenes, 1):
+        fields = {k: v for k, v in s.model_dump().items() if k not in ("narration", "scene_type") and v not in ("", [], False)}
+        content = ", ".join(f"{k}={v}" for k, v in fields.items())
+        lines.append(f"| {i} | {s.narration} | {s.scene_type} | {content} |")
+    lines += ["", f"**Kapanış metni (ekranda):** {script.cta}", "", f"**Hashtags:** {' '.join(script.hashtags)}", ""]
+    return "\n".join(lines)
 
-    json_data = script.model_dump()
-    json_data["narration_full"] = full_narration
-    json_data["company"] = topic.get("company", "")
-    json_data["topic_context"] = topic.get("angle", "")
-    (video_dir / "script.json").write_text(
-        json.dumps(json_data, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
 
+def _write_short(
+    topic: dict,
+    script: ShortScript,
+    out_dir: Path,
+    do_tts: bool,
+    do_video: bool,
+    dry_run: bool,
+    prefix: str = "",
+    part_info: dict | None = None,
+) -> Path:
+    from src.script_writer import dump_script
+
+    video_dir = out_dir / f"short-{prefix}{slugify(script.title)}"
+    video_dir.mkdir(parents=True, exist_ok=True)
+    (video_dir / "script.md").write_text(_script_md(topic, script), encoding="utf-8")
+    extra = {"company": topic.get("company", ""), "topic_context": topic.get("angle", "")}
+    if part_info:
+        extra["series_part"] = part_info
+    (video_dir / "script.json").write_text(dump_script(script, extra), encoding="utf-8")
+
+    narration = script.narration_full
     if do_tts:
         from src import tts
 
-        word_timings = tts.synthesize_with_timestamps(full_narration, str(video_dir / "audio.mp3"))
-        if word_timings:
-            (video_dir / "word_timings.json").write_text(
-                json.dumps(word_timings, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+        timings = tts.synthesize_with_timestamps(narration, str(video_dir / "audio.mp3"))
+        if timings:
+            (video_dir / "word_timings.json").write_text(json.dumps(timings, ensure_ascii=False, indent=2), encoding="utf-8")
+    elif dry_run and do_video:
+        _silent_audio_with_timings(narration, video_dir)
 
+    if do_video and (video_dir / "audio.mp3").exists():
+        from src import renderer
+
+        try:
+            out = renderer.render(video_dir, part_info=part_info)
+            print(f"   Video: {out}")
+        except renderer.RenderError as e:
+            print(f"   HATA (video üretilemedi, script/ses hazır): {e}")
     return video_dir
 
 
@@ -129,22 +173,13 @@ def _write_long(topic: dict, script: LongScript, out_dir: Path, do_tts: bool, pr
     video_dir = out_dir / f"long-{prefix}{slugify(script.title)}"
     video_dir.mkdir(parents=True, exist_ok=True)
 
-    md_lines = [
-        f"# {script.title}",
-        "",
-        f"**Kaynak konu:** {topic['title']} ({topic.get('source', '')})",
-        "",
-        f"**Hook:** {script.hook}",
-        "",
-    ]
+    md_lines = [f"# {script.title}", "", f"**Kaynak konu:** {topic['title']} ({topic.get('source', '')})", "",
+                f"**Hook:** {script.hook}", ""]
     for chapter in script.chapters:
         md_lines += [f"## {chapter.heading}", "", chapter.narration, ""]
-    md_lines += [
-        f"**CTA:** {script.cta}",
-        "",
-        f"**Hashtags:** {' '.join(script.hashtags)}",
-        "",
-    ]
+        if chapter.scenes:
+            md_lines += [f"- *{s.scene_type}*: {s.narration}" for s in chapter.scenes] + [""]
+    md_lines += [f"**CTA:** {script.cta}", "", f"**Hashtags:** {' '.join(script.hashtags)}", ""]
     (video_dir / "script.md").write_text("\n".join(md_lines), encoding="utf-8")
     (video_dir / "script.json").write_text(script.model_dump_json(indent=2), encoding="utf-8")
 
@@ -152,66 +187,52 @@ def _write_long(topic: dict, script: LongScript, out_dir: Path, do_tts: bool, pr
         from src import tts
 
         tts.synthesize(script.full_narration, str(video_dir / "audio.mp3"))
-
     return video_dir
 
 
-def _dry_run_weekly_part(topic: dict, part_index: int) -> ShortScript:
-    from src.script_writer import WEEKLY_PARTS
-
-    part = WEEKLY_PARTS[part_index]
-    return ShortScript(
-        title=f"[DRY RUN] {topic['title']} - {part['focus_title']}",
-        hook=ShortBeat(
-            narration=f"[DRY RUN] {part['day_label']} bölümü açılışı.",
-            visual_notes=[f"[DRY RUN] {topic.get('company', '')} logo"],
-        ),
-        setup=ShortBeat(
-            narration=f"[DRY RUN] {part['focus']}",
-            visual_notes=["[DRY RUN] kuruluş sahnesi 1", "[DRY RUN] kuruluş sahnesi 2"],
-        ),
-        twist=ShortBeat(
-            narration="[DRY RUN] Örnek dönüm noktası metni.",
-            visual_notes=["[DRY RUN] somut sahne 1", "[DRY RUN] somut sahne 2"],
-        ),
-        cta=f"[DRY RUN] {part['cliffhanger']}",
-        hashtags=["#dryrun", "#test"],
-    )
+def _pick_topics(n: int, topic_id: str | None) -> list[dict]:
+    if topic_id:
+        bank = {t["id"]: t for t in research.load_bank()}
+        if topic_id not in bank:
+            raise SystemExit(f"Konu bankasında '{topic_id}' yok. Seçenekler: {', '.join(bank)}")
+        return [{**bank[topic_id], "reference": "", "source": "evergreen"}] * n
+    return research.get_topics(n, state.get_used_ids())
 
 
-# RULES.md kural 8: her hafta seçilen TEK konu 3 short'a bölünür (Pzt/Çrş/Cuma:
-# giriş-kuruluş / zirve-hata / çöküş-sonuç), hafta sonu bu 3'ünü sentezleyen 1
-# uzun video üretilir. 4 farklı konu değil, TEK konunun 4 parçası.
-def run_weekly_arc(do_tts: bool, dry_run: bool) -> None:
-    used = state.get_used_ids()
-    topics = research.get_topics(1, used)
+# --------------------------------------------------------------------------- akışlar
+
+def run_weekly_arc(do_tts: bool, do_video: bool, dry_run: bool, topic_id: str | None) -> None:
+    topics = _pick_topics(1, topic_id)
     if not topics:
         print("UYARI: haftalık seri için konu bulunamadı.")
         return
     topic = topics[0]
-
     out_dir = OUTPUT_DIR / date.today().isoformat()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     from src.script_writer import WEEKLY_PARTS
 
     print(f"Haftalık seri konusu: {topic['title']} ({topic.get('company', '')})")
-
     results = []
     part_narrations: list[str] = []
     for part_index in (1, 2, 3):
-        day_label = WEEKLY_PARTS[part_index]["day_label"]
+        part = WEEKLY_PARTS[part_index]
         if dry_run:
-            script = _dry_run_weekly_part(topic, part_index)
+            script = _dry_run_short(topic, suffix=f" - {part['focus_title']}")
         else:
             from src import script_writer
 
             script = script_writer.write_weekly_part_script(topic, part_index, part_narrations)
-        beats = [("hook", script.hook), ("setup", script.setup), ("twist", script.twist)]
-        part_narrations.append(" ".join(beat.narration for _, beat in beats))
+        part_narrations.append(script.narration_full)
+        part_info = {
+            "index": part_index,
+            "total": 3,
+            "day": part["day_label"],
+            "next_day": WEEKLY_PARTS[part_index + 1]["day_label"] if part_index < 3 else "",
+        }
         path = _write_short(
-            topic, script, out_dir, do_tts and not dry_run,
-            prefix=f"{part_index}-{slugify(day_label)}-",
+            topic, script, out_dir, do_tts and not dry_run, do_video, dry_run,
+            prefix=f"{part_index}-{slugify(part['day_label'])}-", part_info=part_info,
         )
         results.append(str(path))
 
@@ -221,103 +242,69 @@ def run_weekly_arc(do_tts: bool, dry_run: bool) -> None:
         from src import script_writer
 
         long_script = script_writer.write_weekly_recap_script(topic, part_narrations)
-    long_path = _write_long(
-        topic, long_script, out_dir, do_tts and not dry_run, prefix="hafta-sonu-ozet-"
-    )
-    results.append(str(long_path))
+    results.append(str(_write_long(topic, long_script, out_dir, do_tts and not dry_run, prefix="hafta-sonu-ozet-")))
 
     if not dry_run:
         state.mark_used(topic["id"], "weekly-arc")
         state.save()
 
-    print(f"\nÜretildi: {len(results)} içerik (3 short + 1 özet uzun video) -> {out_dir}")
+    print(f"\nÜretildi: {len(results)} içerik (3 short + 1 uzun video script'i) -> {out_dir}")
     for r in results:
         print(" -", r)
     if dry_run:
-        print("\n(dry-run modunda: gerçek API çağrısı yapılmadı, state güncellenmedi)")
+        print("\n(dry-run: gerçek API çağrısı yapılmadı, state güncellenmedi)")
 
 
-# --mode shorts / --mode long: ad-hoc/tekil test çalıştırmaları, her biri kendi
-# bağımsız konusuyla (haftalık seri akışının dışında, hızlı test için).
-def run_adhoc(mode: str, shorts_count: int, long_count: int, do_tts: bool, dry_run: bool) -> None:
-    used = state.get_used_ids()
-
-    needed = shorts_count if mode == "shorts" else long_count
-    topics = research.get_topics(needed, used)
-    if len(topics) < needed:
-        print(f"UYARI: {needed} konu istendi ama sadece {len(topics)} tane bulunabildi.")
-
+def run_adhoc(mode: str, count: int, do_tts: bool, do_video: bool, dry_run: bool, topic_id: str | None) -> None:
+    topics = _pick_topics(count, topic_id)
+    if len(topics) < count:
+        print(f"UYARI: {count} konu istendi ama sadece {len(topics)} tane bulunabildi.")
     out_dir = OUTPUT_DIR / date.today().isoformat()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     results = []
-
-    if mode == "shorts":
-        for topic in topics:
+    for topic in topics:
+        if mode == "shorts":
             if dry_run:
                 script = _dry_run_short(topic)
             else:
                 from src import script_writer
 
                 script = script_writer.write_short_script(topic)
-            path = _write_short(topic, script, out_dir, do_tts and not dry_run)
-            if not dry_run:
-                state.mark_used(topic["id"], "short")
-            results.append(str(path))
-
-    if mode == "long":
-        for topic in topics:
+            results.append(str(_write_short(topic, script, out_dir, do_tts and not dry_run, do_video, dry_run)))
+        else:
             if dry_run:
-                script = _dry_run_long(topic)
+                long_script = _dry_run_long(topic)
             else:
                 from src import script_writer
 
-                script = script_writer.write_long_script(topic)
-            path = _write_long(topic, script, out_dir, do_tts and not dry_run)
-            if not dry_run:
-                state.mark_used(topic["id"], "long")
-            results.append(str(path))
+                long_script = script_writer.write_long_script(topic)
+            results.append(str(_write_long(topic, long_script, out_dir, do_tts and not dry_run)))
+        if not dry_run:
+            state.mark_used(topic["id"], "short" if mode == "shorts" else "long")
 
     if not dry_run:
         state.save()
-
     print(f"\nÜretildi: {len(results)} içerik -> {out_dir}")
     for r in results:
         print(" -", r)
     if dry_run:
-        print("\n(dry-run modunda: gerçek API çağrısı yapılmadı, state güncellenmedi)")
+        print("\n(dry-run: gerçek API çağrısı yapılmadı, state güncellenmedi)")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Business Stories içerik otomasyonu")
+    parser = argparse.ArgumentParser(description="Short video içerik otomasyonu")
     parser.add_argument("--mode", choices=["shorts", "long", "weekly"], default="weekly")
-    parser.add_argument(
-        "--shorts-count",
-        type=int,
-        default=int(os.environ.get("SHORTS_PER_WEEK", 3)),
-        help="Sadece --mode shorts için (ad-hoc test)",
-    )
-    parser.add_argument(
-        "--long-count",
-        type=int,
-        default=int(os.environ.get("LONG_PER_WEEK", 1)),
-        help="Sadece --mode long için (ad-hoc test)",
-    )
+    parser.add_argument("--shorts-count", type=int, default=int(os.environ.get("SHORTS_PER_WEEK", 3)))
+    parser.add_argument("--long-count", type=int, default=int(os.environ.get("LONG_PER_WEEK", 1)))
+    parser.add_argument("--topic", help="Konu bankasından belirli bir konu id'si (ör. nokia, kodak)")
     parser.add_argument("--skip-tts", action="store_true", help="ElevenLabs çağrısını atla")
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Hiçbir API çağrısı yapmadan boru hattını sahte veriyle test et",
-    )
+    parser.add_argument("--no-video", action="store_true", help="Video render etme")
+    parser.add_argument("--dry-run", action="store_true", help="API çağrısı yapmadan sahte veriyle test et")
     args = parser.parse_args()
 
     if args.mode == "weekly":
-        run_weekly_arc(do_tts=not args.skip_tts, dry_run=args.dry_run)
+        run_weekly_arc(not args.skip_tts, not args.no_video, args.dry_run, args.topic)
     else:
-        run_adhoc(
-            mode=args.mode,
-            shorts_count=args.shorts_count,
-            long_count=args.long_count,
-            do_tts=not args.skip_tts,
-            dry_run=args.dry_run,
-        )
+        count = args.shorts_count if args.mode == "shorts" else args.long_count
+        run_adhoc(args.mode, count, not args.skip_tts, not args.no_video, args.dry_run, args.topic)

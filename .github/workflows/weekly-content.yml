@@ -19,8 +19,17 @@ jobs:
         with:
           python-version: "3.11"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: remotion/package-lock.json
+
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+          cd remotion && npm ci && npx remotion browser ensure
 
       - name: Generate weekly content
         env:
@@ -34,11 +43,13 @@ jobs:
           NEWS_GL: ${{ vars.NEWS_GL }}
         run: python run.py --mode weekly
 
-      - name: Upload audio files as artifact
+      - name: Upload audio/video files as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: audio-${{ github.run_id }}
-          path: output/**/*.mp3
+          name: media-${{ github.run_id }}
+          path: |
+            output/**/*.mp3
+            output/**/*.mp4
           if-no-files-found: ignore
           retention-days: 90
 

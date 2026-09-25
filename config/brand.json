@@ -1,0 +1,34 @@
+{
+  "_aciklama": "Kanal/seri kimliği. Koddaki hiçbir yerde kanal/seri adı yoktur; hepsi buradan okunur. Metin alanları boş bırakılabilir: series_name boşsa rozet ve outro'daki seri adı hiç çizilmez. Başka bir dosya kullanmak için BRAND_CONFIG ortam değişkenine yol verin.",
+  "series_name": "",
+  "badge_text": "",
+  "palette": {
+    "background": "#0B1020",
+    "background_alt": "#18204A",
+    "text": "#FFFFFF",
+    "muted": "#A9B1D6",
+    "accent": "#FFC61A",
+    "up": "#22C55E",
+    "down": "#FF3B3B",
+    "card": "#FFFFFF",
+    "card_text": "#0B1020"
+  },
+  "fonts": {
+    "heading": "Montserrat.ttf",
+    "body": "Inter.ttf"
+  },
+  "intro": {
+    "enabled": true
+  },
+  "outro": {
+    "enabled": true,
+    "seconds": 2.6,
+    "follow_text": "",
+    "next_part_template": "",
+    "last_part_template": ""
+  },
+  "audio": {
+    "music_volume_db": -20,
+    "sfx_volume_db": -6
+  }
+}

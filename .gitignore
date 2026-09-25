@@ -6,3 +6,6 @@ venv/
 *.mp3
 *.mp4
 output/**/assets/
+remotion/node_modules/
+output/**/kareler/
+assets/logos/_not_found.json
