@@ -11,6 +11,7 @@ tekrar denemez.
 """
 
 import json
+import math
 import os
 import time
 
@@ -91,8 +92,9 @@ HOOK_RULES = """Hook, tempo ve kapanış kuralları (RULES.md kural 2, 4):
     (ör. "...reddeden şirketi biliyor musunuz?"). Bu durumda: ilk sahne bağlamı veren
     somut unsuru göstermeli (ilgili rakam, karşı taraf şirketin logosu ya da olay yılı);
     cevap olan marka (mystery_brand) ilk sahnede de yer alabilir, video onu soru işaretli
-    kutuyla gizler. Marka en geç 5. saniyede sesli söylenmeli; söylendiği sahne
-    logo_intro + reveal=true olmalı. reveal_by_seconds'a bu saniyeyi yaz (<= 5).
+    kutuyla gizler. Marka seslendirmede EN GEÇ 4,5. SANİYEDE söylenmeli; bu, metnin
+    ilk ~8 kelimesi demektir (ör. kısa bir soru + "Cevap: X."). Söylendiği sahne
+    logo_intro + reveal=true olmalı. reveal_by_seconds'a bu saniyeyi yaz (<= 4.5).
   * direct: ana marka ilk cümlede söyleniyor; ilk sahne o markayı (logo_intro ya da
     brand alanı dolu bir sahne) göstermeli ki ilk 3 saniyede görünsün.
 - Tempo hızlı: gereksiz giriş yok, her cümle yeni bir bilgi.
@@ -102,7 +104,8 @@ HOOK_RULES = """Hook, tempo ve kapanış kuralları (RULES.md kural 2, 4):
 
 SHORT_PROMPT = """Sen viral iş dünyası içerikleri yazan deneyimli bir YouTube Shorts senaristisin.
 
-Aşağıdaki gerçek şirket olayı hakkında 30-45 saniyelik (80-110 kelime) bir Shorts senaryosu
+Aşağıdaki gerçek şirket olayı hakkında 30-45 saniyelik ({min_words}-{max_words} kelime, bu
+sınır KESİNDİR) bir Shorts senaryosu
 yaz ve AYNI ANDA her cümlenin ekranda nasıl görüneceğini yapılandır.
 
 Konu: {title}
@@ -239,6 +242,8 @@ def _format(prompt: str, topic: dict, **extra: str) -> str:
         "scene_rules": SCENE_RULES,
         "hook_rules": HOOK_RULES,
         "focus_block": "",
+        "min_words": str(TARGET_MIN_WORDS),
+        "max_words": str(TARGET_MAX_WORDS),
     }
     values.update(extra)
     return prompt.format(**values)
@@ -266,7 +271,130 @@ def _generate(contents: str, schema: type):
 
 
 def write_short_script(topic: dict, focus_block: str = "") -> ShortScript:
-    return _generate(_format(SHORT_PROMPT, topic, focus_block=focus_block), ShortScript)
+    script = _generate(_format(SHORT_PROMPT, topic, focus_block=focus_block), ShortScript)
+    return enforce_short_constraints(script)
+
+
+# ---------------------------------------------------------------------------
+# Süre ve gizem kuralları (RULES.md kural 2 ve 4) - Gemini'ye gitmeden yerelde kontrol.
+#
+# Konuşma hızı, bu projedeki ElevenLabs seslendirmelerinden ölçüldü: boşluksuz ~12
+# karakter/sn (~1,95 kelime/sn; Yahoo 77 kelime = 39,1 sn, MySpace 96 kelime = 50,2 sn).
+# Ses/model değişirse yalnızca SPEECH_CHARS_PER_SEC güncellenir. Karakter bazlı tahmin
+# kelime bazlıdan daha isabetlidir (Türkçe kelime uzunlukları çok değişken): üç gerçek
+# seslendirmede toplam süre ±1,4 sn isabetle tahmin edildi. Açılış (hook) ortalamadan hızlı
+# okunuyor (13,2-14,1 kar/sn), bu yüzden markanın söylenme anı ayrı hızla tahmin edilir.
+SPEECH_CHARS_PER_SEC = 12.0
+OPENING_CHARS_PER_SEC = 13.7
+MIN_SECONDS = 30.0
+MAX_SECONDS = 45.0
+MYSTERY_BRAND_DEADLINE = 4.5
+TARGET_MIN_WORDS = 60   # ~31 sn
+TARGET_MAX_WORDS = 85   # ~44 sn
+
+
+def estimate_seconds(text: str) -> float:
+    return sum(len(w) for w in text.split()) / SPEECH_CHARS_PER_SEC
+
+
+def estimate_mention_seconds(text: str, brand: str) -> float | None:
+    """Markanın metinde ilk geçtiği kelimenin tahmini başlangıç saniyesi."""
+    key = _brand_key(brand)
+    if not key:
+        return None
+    before = 0
+    for word in text.split():
+        if _brand_key(word).startswith(key):
+            return before / OPENING_CHARS_PER_SEC
+        before += len(word)
+    return None
+
+
+def _brand_key(text: str) -> str:
+    text = text.replace("I", "ı").replace("İ", "i").lower()
+    return "".join(ch for ch in text.split(" ")[0] if ch.isalnum())
+
+
+def short_problems(script: ShortScript) -> list[str]:
+    """Kurallara uymayan noktaların Gemini'ye verilebilecek açıklamaları (boşsa uygun)."""
+    text = script.narration_full
+    words = len(text.split())
+    secs = estimate_seconds(text)
+    problems = []
+    # Hedefe hafif pay bırakılır (42 / 33 sn): düzeltilmiş metin sınırda kalmasın.
+    if secs > MAX_SECONDS:
+        cut = math.ceil(words - words * (MAX_SECONDS - 3) / secs)
+        problems.append(
+            f"Metin çok uzun: tahmini {secs:.1f} sn ({words} kelime); 30-45 sn olmalı. "
+            f"Yaklaşık {cut} kelime çıkar (en zayıf cümleleri sil, sahneleri birleştirme)."
+        )
+    elif secs < MIN_SECONDS:
+        add = math.ceil(words * (MIN_SECONDS + 3) / secs - words)
+        problems.append(
+            f"Metin çok kısa: tahmini {secs:.1f} sn ({words} kelime); 30-45 sn olmalı. "
+            f"Yaklaşık {add} kelimelik somut bir bilgi ekle."
+        )
+    if script.hook_type == "mystery":
+        brand = script.mystery_brand or script.main_brand
+        at = estimate_mention_seconds(text, brand)
+        if at is None:
+            problems.append(f"Gizemli hook'un cevabı olan '{brand}' seslendirmede hiç geçmiyor.")
+        elif at > MYSTERY_BRAND_DEADLINE:
+            problems.append(
+                f"'{brand}' seslendirmede tahminen {at:.1f}. saniyede söyleniyor; en geç "
+                f"{MYSTERY_BRAND_DEADLINE:g}. saniyede (ilk ~8 kelime içinde) söylenmeli. Açılışı kısalt."
+            )
+    return problems
+
+
+REVISE_PROMPT = """Aşağıdaki YouTube Shorts script'i (JSON) şu kurallara uymuyor:
+{problems}
+
+Script'i yalnızca bu sorunları giderecek şekilde düzenle. Diğer her şeyi (konu, ton, sahne
+yapısı, alan kuralları) koru. Aynı JSON şemasında, eksiksiz script'i döndür.
+
+{scene_rules}
+
+{hook_rules}
+
+Mevcut script:
+{script_json}"""
+
+
+def enforce_short_constraints(script: ShortScript) -> ShortScript:
+    """Süre (30-45 sn) ve gizemli hook marka zamanı (<= 4,5 sn) yerelde kontrol edilir.
+    Uymuyorsa Gemini'ye TEK bir düzeltme isteği gider; sonuç hâlâ uymuyorsa uyarı
+    verilip yine de kullanılır (ek istek atılmaz - günlük kota kısıtlı)."""
+    problems = short_problems(script)
+    if not problems:
+        print(f"   Script kontrolü: {_summary(script)} - uygun.")
+        return script
+    print(f"   Script kontrolü: {_summary(script)} - düzeltme isteniyor (1 istek):")
+    for p in problems:
+        print(f"     - {p}")
+    revised = _generate(
+        REVISE_PROMPT.format(
+            problems="\n".join(f"- {p}" for p in problems),
+            scene_rules=SCENE_RULES,
+            hook_rules=HOOK_RULES,
+            script_json=script.model_dump_json(indent=1),
+        ),
+        ShortScript,
+    )
+    remaining = short_problems(revised)
+    print(f"   Düzeltilmiş script: {_summary(revised)}")
+    for p in remaining:
+        print(f"   UYARI (tek düzeltme hakkı kullanıldı, script böyle kullanılacak): {p}")
+    return revised
+
+
+def _summary(script: ShortScript) -> str:
+    text = script.narration_full
+    s = f"{len(text.split())} kelime, ~{estimate_seconds(text):.1f} sn"
+    if script.hook_type == "mystery":
+        at = estimate_mention_seconds(text, script.mystery_brand or script.main_brand)
+        s += f", marka ~{at:.1f} sn" if at is not None else ", marka metinde yok"
+    return s
 
 
 def write_long_script(topic: dict) -> LongScript:

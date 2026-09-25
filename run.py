@@ -133,6 +133,24 @@ def _script_md(topic: dict, script: ShortScript) -> str:
     return "\n".join(lines)
 
 
+def _report_actual_timing(script: ShortScript, timings: list[dict]) -> None:
+    """Seslendirme sonrası gerçek süre ve gizemli markanın söylenme anı (kural 2, 4).
+    Yalnızca raporlar; ses zaten üretildiği için ek istek atılmaz."""
+    from src import script_writer as sw
+    from src.scene_planner import _find_spoken
+
+    duration = timings[-1]["end"]
+    line = f"   Seslendirme: {duration:.1f} sn"
+    if not sw.MIN_SECONDS <= duration <= sw.MAX_SECONDS:
+        line += f"  UYARI: {sw.MIN_SECONDS:.0f}-{sw.MAX_SECONDS:.0f} sn dışında"
+    if script.hook_type == "mystery":
+        at = _find_spoken(script.mystery_brand or script.main_brand, timings)
+        line += f" | marka {at:.2f} sn" if at is not None else " | UYARI: marka seslendirmede bulunamadı"
+        if at is not None and at > sw.MYSTERY_BRAND_DEADLINE:
+            line += f"  UYARI: {sw.MYSTERY_BRAND_DEADLINE:g} sn'den geç"
+    print(line)
+
+
 def _write_short(
     topic: dict,
     script: ShortScript,
@@ -160,6 +178,7 @@ def _write_short(
         timings = tts.synthesize_with_timestamps(narration, str(video_dir / "audio.mp3"))
         if timings:
             (video_dir / "word_timings.json").write_text(json.dumps(timings, ensure_ascii=False, indent=2), encoding="utf-8")
+            _report_actual_timing(script, timings)
     elif dry_run and do_video:
         _silent_audio_with_timings(narration, video_dir)
 

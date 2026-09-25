@@ -38,13 +38,16 @@ hizalar; `_validate_comparisons`), `src/logos.py` (Wikidata resmi logo özelliğ
 - **Gizemli hook** (hook bir soru/gizem kuruyorsa, ör. "…yapan şirketi biliyor
   musunuz?"): ilk sahnede bağlamı veren somut unsur gösterilir (ilgili rakam,
   karşı taraf şirketin logosu ya da olay yılı); cevap olan marka soru işaretli
-  boş kutuyla gizlenir ve **en geç 5. saniyede** impact efektiyle açılır.
+  boş kutuyla gizlenir ve **en geç 5. saniyede** impact efektiyle açılır. Marka adı
+  seslendirmede **en geç 4,5. saniyede** (metnin ilk ~8 kelimesi içinde) söylenir.
 - **Doğrudan hook:** ana marka **ilk 3 saniyede** doğrudan görünür.
 
 Gemini her script'te `hook_type` (mystery/direct), `mystery_brand` ve
 `reveal_by_seconds` alanlarını üretir.
 
-**Uygulama:** `src/script_writer.py` (`HOOK_RULES`), `src/scene_planner.py`
+**Uygulama:** `src/script_writer.py` (`HOOK_RULES`; `short_problems` markanın söylenme
+anını TTS'ten önce yerelde tahmin eder, geç kalıyorsa tek bir düzeltme isteği gider),
+`run.py` (`_report_actual_timing`: TTS sonrası gerçek anı raporlar), `src/scene_planner.py`
 (`_apply_mystery`: reveal anı markanın sesli söylendiği kelimedir, 5 sn'yi
 aşarsa 5 sn'ye çekilir; ilk sahnede gizli kutu yoksa eklenir; reveal anındaki
 sahne markayı büyük göstermiyorsa o andan itibaren logo reveal kartı konur;
@@ -65,7 +68,15 @@ Rakamlar konuşulduğu gibi ama rakamla yazılır ("44,6 milyar dolar").
 cümle yeni bilgi taşır. Son cümle ve ekrandaki kapanış metni (cta) merak açığı
 bırakır; outro kartında gösterilir.
 
-**Uygulama:** `src/script_writer.py` (`HOOK_RULES`), `remotion/src/Short.tsx` (`Outro`).
+**Süre: seslendirme 30-45 sn.** Bu ses ~1,95 kelime/sn (boşluksuz ~12 karakter/sn)
+konuştuğu için prompt 60-85 kelime ister. Script üretildikten sonra süre, karakter
+sayısından yerelde tahmin edilir (gerçek seslendirmelerde ±1,4 sn isabet); aralık
+dışındaysa Gemini'ye **yalnızca bir kez** kısaltma/uzatma isteği gider, sonuç hâlâ
+uymuyorsa uyarı verilip kullanılır. Ses/model değişirse `SPEECH_CHARS_PER_SEC` ve
+`OPENING_CHARS_PER_SEC` yeniden ölçülmelidir.
+
+**Uygulama:** `src/script_writer.py` (`HOOK_RULES`, `enforce_short_constraints`,
+`estimate_seconds`), `run.py` (`_report_actual_timing`), `remotion/src/Short.tsx` (`Outro`).
 
 ## 5. Her sahne 2-3 saniye, sürekli hareket
 
