@@ -40,7 +40,12 @@ const Pop: React.FC<{delay?: number; children: React.ReactNode; style?: React.CS
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const s = spring({frame: frame - delay, fps, config: {damping: 11, mass: 0.6}});
-  return <div style={{transform: `scale(${s})`, opacity: Math.min(1, s * 1.5), ...style}}>{children}</div>;
+  // Yarı boyuttan başlar: sahne geçişlerinde ekran birkaç kare boyunca boş kalmaz.
+  return (
+    <div style={{transform: `scale(${interpolate(s, [0, 1], [0.55, 1])})`, opacity: Math.min(1, 0.3 + s * 1.2), ...style}}>
+      {children}
+    </div>
+  );
 };
 
 // Kelime kelime beliren metin; highlight kelimeleri vurgu kutusu alır.

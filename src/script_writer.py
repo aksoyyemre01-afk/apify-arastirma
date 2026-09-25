@@ -69,6 +69,9 @@ SCENE_RULES = """Sahne kuralları (RULES.md kural 1, 5, 10 - ÇOK ÖNEMLİ):
   anlatılıyorsa big_number kullan (ör. value "%50", label "İnternet kullanıcılarının payı").
 - Her sahnenin mood'unu belirle: rise (zirve/büyüme/başarı), fall (düşüş/kayıp/kriz/kötü
   karar) ya da neutral. Zemin tonu buna göre değişir.
+- Ekranda görünen her rakam (value, year, end_value, left_value, right_value, label) O
+  SAHNENİN cümlesinde rakamla söylenmiş olmalı; cümlede geçmeyen tahmini/uydurma rakam
+  yazma (uymayan rakamlar ekrandan otomatik silinir).
 - quote.text cümlenin KENDİ kelimelerinden kısaltılmış olmalı; cümlede olmayan yeni bir
   yorum/hüküm ekleme.
 - Aynı sahne tipini art arda 2'den fazla kullanma; çeşitlilik tempoyu yükseltir.

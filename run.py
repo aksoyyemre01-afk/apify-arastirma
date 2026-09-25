@@ -51,7 +51,7 @@ def _dry_run_short(topic: dict, suffix: str = "") -> ShortScript:
     c = topic.get("company") or "Şirket"
     rival = next(r for r in _DRY_RUN_RIVALS if r.lower() != c.lower())
     scenes = [
-        Scene(narration="Tek bir kararla milyarlarca dolar kaybeden şirketi biliyor musunuz?",
+        Scene(narration="Tek bir kararla 10 milyar dolar kaybeden şirketi biliyor musunuz?",
               scene_type="big_number", value="10", unit="MİLYAR $", label="Tek kararın bedeli"),
         Scene(narration=f"Cevap: {c}.", scene_type="logo_intro", brand=c, reveal=True),
         Scene(narration=f"{c}, 1998 yılında pazarın açık ara lideriydi.",
@@ -61,7 +61,7 @@ def _dry_run_short(topic: dict, suffix: str = "") -> ShortScript:
         Scene(narration=f"Sonra {rival} sahneye çıktı.",
               scene_type="comparison", left_brand=c, right_brand=rival,
               left_value="LİDER", right_value="YENİ RAKİP", highlight_side="right"),
-        Scene(narration="Satışlar sadece birkaç yıl içinde çakıldı.",
+        Scene(narration="Satışlar birkaç yılda yüzde 88 çakıldı.",
               scene_type="chart", direction="down", points=[100, 92, 60, 31, 12],
               point_labels=["2007", "2008", "2009", "2010", "2011"], end_value="-%88", brand=c, mood="fall"),
         Scene(narration="Yönetim değişime bir türlü ayak uyduramadı.",

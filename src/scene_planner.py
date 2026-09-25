@@ -101,6 +101,34 @@ def _is_generic(name: str) -> bool:
     return not words or all(w in _GENERIC_WORDS for w in words)
 
 
+def _numbers(text: str) -> set[str]:
+    """Metindeki sayılar, ayırıcısız: '44,6' ve '44.6' -> '446', '%94' -> '94'."""
+    return {re.sub(r"[.,]", "", m) for m in re.findall(r"\d+(?:[.,]\d+)*", text or "")}
+
+
+def _enforce_spoken_numbers(scenes: list[dict]) -> None:
+    """Kural 1: ekrandaki her rakam o cümlede söylenmiş olmalı. Script'te uydurulmuş ya
+    da cümlede geçmeyen rakamlar (ör. söylenmeyen bir grafik son değeri) ekrana çıkmaz;
+    aksi halde izleyici sesle görüntü arasında çelişki görür."""
+    for s in scenes:
+        spoken = _numbers(s.get("narration", ""))
+
+        def unspoken(field: str) -> bool:
+            nums = _numbers(s.get(field, ""))
+            return bool(nums) and not nums <= spoken
+
+        t = s["scene_type"]
+        if (t == "big_number" and unspoken("value")) or (t == "timeline" and unspoken("year")):
+            print(f"      [Kural 1] söylenmeyen rakam ({s.get('value') or s.get('year')}) -> alıntı kartı: {s['narration']!r}")
+            s.update(scene_type="quote", text="", highlight=[], value="", unit="", year="")
+        if t == "chart" and unspoken("end_value"):
+            print(f"      [Kural 1] söylenmeyen grafik değeri gizlendi: {s['end_value']!r}")
+            s["end_value"] = ""
+        for field in ("left_value", "right_value", "label"):
+            if unspoken(field):
+                s[field] = ""
+
+
 def _validate_comparisons(scenes: list[dict], has_logo) -> None:
     """Kural 1: karşılaştırmanın iki tarafı da gerçek, logosu çekilebilen bir şirket/ürün
     olmalı. "X vs Yeni rakip" gibi bir taraf genel ifadeyse ya da logosu bulunamıyorsa
@@ -283,7 +311,7 @@ def _enforce_min_durations(segs: list[dict], reveal_t: float | None) -> None:
 
 def _split_long(segs: list[dict], timings: list[dict], main_brand: str) -> list[dict]:
     out = []
-    for seg in segs:
+    for idx, seg in enumerate(segs):
         dur = seg["end"] - seg["start"]
         if dur <= SPLIT_THRESHOLD:
             out.append(seg)
@@ -291,6 +319,9 @@ def _split_long(segs: list[dict], timings: list[dict], main_brand: str) -> list[
         n = math.ceil(dur / MAX_SCENE_SECONDS)
         step = dur / n
         alts = _alternates(seg["scene"], main_brand)
+        # Bir sonraki sahneyle aynı tipte olmayan aday öne alınır (art arda aynı kart olmasın).
+        next_type = segs[idx + 1]["scene"]["scene_type"] if idx + 1 < len(segs) else ""
+        alts.sort(key=lambda a: a["scene_type"] == next_type)
         for k in range(n):
             start, end = seg["start"] + k * step, seg["start"] + (k + 1) * step
             part = dict(seg, start=start, end=end)
@@ -300,19 +331,23 @@ def _split_long(segs: list[dict], timings: list[dict], main_brand: str) -> list[
             else:
                 alt = dict(seg["scene"], **alts[(k // 2) % len(alts)], reveal=False)
                 if alt["scene_type"] == "quote" and not alt.get("text"):
-                    alt["text"] = _spoken_text(timings, start, end) or seg["scene"]["narration"]
+                    alt["text"] = _sentence_tail(seg["scene"]["narration"])
                     alt["highlight"] = _pick_highlight(alt["text"])
-                elif alt["scene_type"] == "logo_intro" and not alt.get("label"):
-                    alt["label"] = _spoken_text(timings, start, end, max_words=5)
                 part.update(scene=alt, variant=0)
             out.append(part)
     return out
 
 
-def _spoken_text(timings: list[dict], start: float, end: float, max_words: int = 8) -> str:
-    """[start, end) aralığında seslendirilen kelimeler (sahnenin o anki cümle parçası)."""
-    words = [w["word"] for w in timings if start - 0.05 <= w["start"] < end]
-    return " ".join(words[:max_words]).strip(" ,;:.")
+def _sentence_tail(narration: str, max_words: int = 9) -> str:
+    """Cümlenin son en fazla `max_words` kelimesi (kısa cümlede tamamı), büyük harfle başlar. Bölünmüş sahnenin
+    ikinci parçası seslendirmenin o anki kısmına denk gelir; cümle ortasından kopan
+    ("güne tamamen bozuldu" gibi) parçalar yerine okunur bir cümle sonu gösterilir."""
+    words = (narration or "").split()
+    tail = " ".join(words[-max_words:]).strip(" ,;:.")
+    if not tail:
+        return ""
+    first = tail[0].replace("i", "İ").replace("ı", "I").upper()
+    return first + tail[1:]
 
 
 def _pick_highlight(text: str) -> list[str]:
@@ -358,6 +393,8 @@ def _alternates(sc: dict, main_brand: str) -> list[dict]:
             out.append({"scene_type": "logo_intro", "brand": brand or main_brand, "label": ""})
     if t != "quote":
         out.append({"scene_type": "quote", "text": "", "highlight": [], "label": ""})
+    if main_brand and not any(a["scene_type"] == "logo_intro" for a in out) and t != "logo_intro":
+        out.append({"scene_type": "logo_intro", "brand": brand or main_brand, "label": ""})
     if not out:
         out.append({"scene_type": "logo_intro", "brand": main_brand, "label": ""})
     return out
@@ -558,6 +595,7 @@ def build_props(
     if not raw:
         raise PlanError("script.json'da 'scenes' yok (eski format). build_video.py --migrate ile dönüştür.")
     scenes = [Scene.model_validate(s).model_dump() for s in raw]
+    _enforce_spoken_numbers(scenes)
     reg = _LogoRegistry(offline_logos)
     _validate_comparisons(scenes, lambda b: reg.src(b) is not None)
     if not timings:
