@@ -4,8 +4,14 @@ Konu, mevcut src/research.py'den (kürasyonlu vaka bankası + haber kaynağı) k
 olanlar arasından seçilir; reddedilen konular aynı hafta tekrar önerilmez. Bölümleme tek
 bir Gemini isteğiyle yapılır: her short aynı hikâyenin farklı bir evresini anlatır ve
 olaylar bölümler arasında tekrar etmez.
+
+Plan onaya sunulmadan önce Doğrulayıcı'dan geçer (verifier.verify_plan); sorunlu iddialar
+revise_plan() ile düzeltilir. Konu reddi --keep-topic ile yapılırsa konu korunur ve plan,
+gerekçe dikkate alınarak yeniden üretilir.
 """
 
+import difflib
+import json
 import re
 
 from google.genai import types
@@ -49,12 +55,45 @@ Bu konuyu, haftanın üç gününde ({days}) yayınlanacak 3 short'a böl. Kural
 - Ayrıca hafta sonu uzun videosu için kısa bir bölüm taslağı yaz.
 - Metinler Türkçe."""
 
+REVISE_PLAN_PROMPT = """Aşağıdaki haftalık video planında (JSON) şu sorunlar tespit edildi:
 
-def plan_week(ctx: RunContext, topic_id: str | None = None) -> None:
+{feedback}
+
+Planı bu maddelere göre düzelt: yanlış olguları doğrusuyla değiştir, doğrulanamayan iddiaları
+çıkar ya da doğrulanabilir genel bir ifadeye çevir. Sorunsuz kısımları olduğu gibi bırak;
+bölüm yapısı (3 bölüm, kronolojik, olaylar bölümler arasında tekrar etmez) korunur. Her
+bölümün key_events listesi yine 3-5 somut ve doğru olay içermeli. Metinler Türkçe.
+
+Konu: {title} ({company})
+
+Plan:
+{plan}"""
+
+
+def _generate(ctx: RunContext, prompt: str, purpose: str) -> None:
+    """Planı üretir, 3 bölüm ve örtüşme kontrolünü yapar, ctx.state['plan']'a yazar."""
+    config = types.GenerateContentConfig(response_mime_type="application/json", response_schema=WeekPlan)
+    plan = WeekPlan.model_validate_json(script_writer.generate_raw(prompt, config, purpose=purpose).text)
+    if len(plan.parts) != 3:
+        raise RuntimeError(f"Plan 3 bölüm yerine {len(plan.parts)} bölüm içeriyor.")
+    for a, b, ratio in _overlaps(plan):
+        ctx.log(AGENT, f"UYARI: {DAYS[a]} ve {DAYS[b]} bölümlerinin olayları %{ratio * 100:.0f} örtüşüyor.")
+    ctx.state["plan"] = {**plan.model_dump(), "days": DAYS}
+
+
+def _plan_listing(plan: dict) -> str:
+    return "\n".join(f"{DAYS[i]} - {p['focus_title']}: {p['focus']} | olaylar: {'; '.join(p['key_events'])}"
+                     for i, p in enumerate(plan["parts"]))
+
+
+def plan_week(ctx: RunContext, topic_id: str | None = None, keep_topic: bool = False) -> None:
+    """keep_topic: mevcut konuyu koruyup planı ctx.state['plan_feedback'] dikkate alınarak yeniden üretir."""
     ctx.current_agent = AGENT
     rejected = set(ctx.state.get("rejected_topic_ids", []))
     used = state.get_used_ids() | rejected
-    if topic_id:
+    if keep_topic:
+        topic = ctx.state["topic"]
+    elif topic_id:
         bank = {t["id"]: t for t in research.load_bank()}
         if topic_id not in bank:
             raise SystemExit(f"Konu bankasında '{topic_id}' yok.")
@@ -64,31 +103,48 @@ def plan_week(ctx: RunContext, topic_id: str | None = None) -> None:
         if not topics:
             raise SystemExit("Kullanılmamış konu bulunamadı.")
         topic = topics[0]
-    ctx.log(AGENT, f"Konu seçildi: **{topic['title']}** ({topic.get('company', '')}, kaynak: {topic.get('source', '')})")
+    if keep_topic:
+        ctx.log(AGENT, f"Konu korunuyor, plan yeniden üretiliyor: **{topic['title']}**")
+    else:
+        ctx.log(AGENT, f"Konu seçildi: **{topic['title']}** ({topic.get('company', '')}, kaynak: {topic.get('source', '')})")
+        ctx.state["plan_feedback"] = []  # önceki konunun plan düzeltmeleri yeni konuya taşınmaz
 
-    reasons = ctx.state.get("rejection_reasons", [])
     rejection = ""
-    if reasons:
+    reasons = ctx.state.get("rejection_reasons", [])
+    if reasons and not keep_topic:
         rejection = "\nÖnceki konu önerileri şu gerekçelerle reddedildi; bunları dikkate al:\n" + "\n".join(f"- {r}" for r in reasons) + "\n"
+    feedback = ctx.state.get("plan_feedback", [])
+    if feedback:
+        rejection += ("\nBu konunun önceki planı şu gerekçelerle reddedildi; aynı hataları yapma, bu "
+                      "düzeltmeleri esas al:\n" + "\n".join(f"- {r}" for r in feedback) + "\n")
     prompt = PLAN_PROMPT.format(
         title=topic["title"], company=topic.get("company", ""), angle=topic.get("angle", ""),
         rejection=rejection, days=", ".join(DAYS),
     )
-    config = types.GenerateContentConfig(response_mime_type="application/json", response_schema=WeekPlan)
-    response = script_writer.generate_raw(prompt, config, purpose="hafta planı")
-    plan = WeekPlan.model_validate_json(response.text)
-    if len(plan.parts) != 3:
-        raise RuntimeError(f"Plan 3 bölüm yerine {len(plan.parts)} bölüm içeriyor.")
-
-    overlaps = _overlaps(plan)
-    for a, b, ratio in overlaps:
-        ctx.log(AGENT, f"UYARI: {DAYS[a]} ve {DAYS[b]} bölümlerinin olayları %{ratio * 100:.0f} örtüşüyor.")
-
+    _generate(ctx, prompt, purpose="hafta planı")
     ctx.state["topic"] = topic
-    ctx.state["plan"] = plan.model_dump()
-    ctx.state["plan"]["days"] = DAYS
-    ctx.log(AGENT, "Hafta planı hazır:", "\n".join(
-        f"{DAYS[i]} - {p.focus_title}: {p.focus} | olaylar: {'; '.join(p.key_events)}" for i, p in enumerate(plan.parts)))
+    ctx.state["plan_revisions"] = []
+    ctx.state.pop("plan_verify", None)
+    ctx.log(AGENT, "Hafta planı hazır:", _plan_listing(ctx.state["plan"]))
+    ctx.save()
+
+
+def revise_plan(ctx: RunContext, feedback: list[str], source: str) -> None:
+    """Planı geri bildirim maddelerine göre tek bir düzeltme isteğiyle düzeltir; farkı log'a yazar."""
+    ctx.current_agent = AGENT
+    topic = ctx.state["topic"]
+    before = ctx.state["plan"]
+    ctx.log(AGENT, f"Plan revizyonu ({source} geri bildirimi, {len(feedback)} madde)",
+            "\n".join(f"- {f}" for f in feedback))
+    plan_json = json.dumps({k: v for k, v in before.items() if k != "days"}, ensure_ascii=False, indent=1)
+    _generate(ctx, REVISE_PLAN_PROMPT.format(feedback="\n".join(f"- {f}" for f in feedback), title=topic["title"],
+                                             company=topic.get("company", ""), plan=plan_json),
+              purpose="hafta planı revizyonu")
+    diff = "\n".join(difflib.unified_diff(_plan_listing(before).splitlines(),
+                                          _plan_listing(ctx.state["plan"]).splitlines(),
+                                          "önce", "sonra", lineterm="", n=0))
+    ctx.log(AGENT, "Plan revizyon farkı:", diff or "(bölüm odak/olaylarında değişiklik yok)")
+    ctx.state.setdefault("plan_revisions", []).append({"source": source, "feedback": feedback, "diff": diff})
     ctx.save()
 
 

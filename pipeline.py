@@ -1,6 +1,6 @@
 """Haftalık multi-agent short üretimi.
 
-Araştırmacı -> [ONAY 1: konu] -> Senarist -> Doğrulayıcı -> Yönetmen -> Eleştirmen
+Araştırmacı -> Doğrulayıcı (plan) -> [ONAY 1: konu] -> Senarist -> Doğrulayıcı -> Yönetmen -> Eleştirmen
 (geçmezse ilgili agent'a geri, en fazla qa.max_rounds revizyon turu) -> [ONAY 2: final].
 Onaylar runs/<hafta>/review.md üzerinden tek komutla verilir.
 
@@ -9,6 +9,7 @@ Kullanım:
     python pipeline.py --week --topic kodak       # belirli bir konuyla başlat
     python pipeline.py --approve                  # bekleyen aşamayı onayla
     python pipeline.py --reject "gerekçe"         # reddet (onay 1: yeni konu; onay 2: düzelttir)
+    python pipeline.py --reject "gerekçe" --keep-topic   # onay 1: konuyu koru, planı gerekçeyle yeniden üret
     python pipeline.py --reject "gerekçe" --short 2   # yalnızca 2. short'u düzelttir
     python pipeline.py --status                   # durum + maliyet
     --run 2026-W40  ile belirli bir haftayı seçin (varsayılan: en son çalıştırma)
@@ -123,12 +124,19 @@ def cmd_week(topic_id: str | None) -> None:
     ctx = RunContext(path)
     attach_usage_hooks(ctx)
     ctx.log("pipeline", f"Yeni haftalık çalıştırma: {path.name}")
-    researcher.plan_week(ctx, topic_id)
-    ctx.set_stage("topic_review")
+    _plan_for_review(ctx, topic_id=topic_id)
     rp = review.write(ctx)
     notify("Haftanın konusu hazır", f"{ctx.state['topic']['title']} — onay için review.md")
     print(f"\nOnay dosyası: {rp}")
     _finish_report(ctx)
+
+
+def _plan_for_review(ctx: RunContext, topic_id: str | None = None, keep_topic: bool = False) -> None:
+    """Araştırmacı planlar, Doğrulayıcı planı kontrol edip düzelttirir; ardından konu onayı."""
+    researcher.plan_week(ctx, topic_id, keep_topic=keep_topic)
+    ctx.check_budget()
+    verifier.verify_plan(ctx)
+    ctx.set_stage("topic_review")
 
 
 def cmd_approve(ctx: RunContext) -> None:
@@ -156,15 +164,25 @@ def cmd_approve(ctx: RunContext) -> None:
         raise SystemExit(f"Onay bekleyen bir aşama yok (aşama: {stage}).")
 
 
-def cmd_reject(ctx: RunContext, reason: str, short: int | None) -> None:
+def cmd_reject(ctx: RunContext, reason: str, short: int | None, keep_topic: bool = False) -> None:
     stage = ctx.stage
-    if stage == "topic_review":
+    if keep_topic and stage != "topic_review":
+        raise SystemExit("--keep-topic yalnızca konu onayı aşamasında kullanılır.")
+    if stage == "topic_review" and keep_topic:
+        ctx.log("insan", f"Plan reddedildi (konu korunuyor): {reason}")
+        ctx.state.setdefault("plan_feedback", []).append(reason)
+        ctx.save()
+        _plan_for_review(ctx, keep_topic=True)
+        rp = review.write(ctx)
+        notify("Plan yeniden üretildi", f"{ctx.state['topic']['title']} — onay için review.md")
+        print(f"Plan yeniden üretildi ve doğrulandı. Onay dosyası: {rp}")
+        _finish_report(ctx)
+    elif stage == "topic_review":
         ctx.log("insan", f"Konu reddedildi: {reason}")
         ctx.state.setdefault("rejected_topic_ids", []).append(ctx.state["topic"]["id"])
         ctx.state.setdefault("rejection_reasons", []).append(reason)
         ctx.save()
-        researcher.plan_week(ctx)
-        ctx.set_stage("topic_review")
+        _plan_for_review(ctx)
         rp = review.write(ctx)
         notify("Yeni konu önerildi", f"{ctx.state['topic']['title']} — onay için review.md")
         print(f"Yeni konu önerildi. Onay dosyası: {rp}")
@@ -337,6 +355,8 @@ if __name__ == "__main__":
     p.add_argument("--run", help="Çalıştırma kimliği (ör. 2026-W40); varsayılan en son")
     p.add_argument("--topic", help="--week ile: konu bankasından belirli bir konu id'si")
     p.add_argument("--short", type=int, help="--reject ile: yalnızca bu short (1-3)")
+    p.add_argument("--keep-topic", action="store_true",
+                   help="--reject ile, konu onayında: konuyu koru, planı gerekçeyle yeniden üret")
     a = p.parse_args()
 
     if a.week:
@@ -346,6 +366,6 @@ if __name__ == "__main__":
     elif a.approve:
         cmd_approve(_open(a.run))
     elif a.reject:
-        cmd_reject(_open(a.run), a.reject, a.short)
+        cmd_reject(_open(a.run), a.reject, a.short, a.keep_topic)
     elif a.status:
         cmd_status(_open(a.run))

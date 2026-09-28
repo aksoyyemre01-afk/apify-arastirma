@@ -1,5 +1,6 @@
 """review.md: iki onay noktasının tek özet dosyası (konu onayı ve yayın öncesi final onayı)."""
 
+import re
 from pathlib import Path
 
 from src.schemas import ShortScript
@@ -26,6 +27,8 @@ def _commands(ctx: RunContext) -> list[str]:
             "",
             f"- Onayla (üretim arka planda başlar): `python pipeline.py --approve --run {run}`",
             f"- Reddet (yeni konu önerilir): `python pipeline.py --reject \"gerekçe\" --run {run}`",
+            f"- Konuyu koru, planı düzelttir (gerekçeyle yeniden üretilir ve doğrulanır): "
+            f"`python pipeline.py --reject \"gerekçe\" --keep-topic --run {run}`",
         ]
     if stage == "final_review":
         return [
@@ -40,6 +43,9 @@ def _commands(ctx: RunContext) -> list[str]:
     if stage == "error":
         return ["## Karar", "", f"- Kaldığı yerden yeniden dene: `python pipeline.py --approve --run {run}`"]
     return []
+
+
+_LEADING_NUMBER = re.compile(r"^\s*\d+[.)]\s*")
 
 
 def _topic_section(ctx: RunContext) -> list[str]:
@@ -60,8 +66,58 @@ def _topic_section(ctx: RunContext) -> list[str]:
     for day, p in zip(plan["days"], plan["parts"]):
         lines.append(f"| {day} | {p['focus_title']} | {p['focus']} | {'<br>'.join(p['key_events'])} | {p['cliffhanger']} |")
     lines += ["", "<details><summary>Hafta sonu uzun videosu taslağı (ikinci aşama)</summary>", ""]
-    lines += [f"{i}. {x}" for i, x in enumerate(plan.get("long_video_outline", []), 1)]
+    # Model maddeleri bazen kendisi numaralandırıyor ("1. ..."); çift numarayı önle.
+    lines += [f"{i}. {_LEADING_NUMBER.sub('', x)}" for i, x in enumerate(plan.get("long_video_outline", []), 1)]
     lines += ["", "</details>", ""]
+    return lines + _plan_verify_section(ctx)
+
+
+_ICON = {"verified": "✅", "incorrect": "❌", "unverifiable": "⚠️"}
+
+
+def _source_links(cl: dict) -> str:
+    titles = cl.get("source_titles") or [str(n) for n in range(1, len(cl["source_urls"]) + 1)]
+    return " ".join(f"[{t}]({u})" for t, u in list(zip(titles, cl["source_urls"]))[:3])
+
+
+def _grounding_note(ver: dict) -> list[str]:
+    if not ver.get("grounded", False):
+        return ["", "> ⚠️ Bu turda Google araması YAPILMADI: sonuçlar ve linkler modelin kendi bilgisine "
+                    "dayanıyor, arama sonucu değil. Rakamları elle kontrol edin."]
+    return ["", f"_{len(ver.get('queries', []))} Google araması yapıldı: "
+                + "; ".join(f"“{q}”" for q in ver.get("queries", [])[:6]) + "_"]
+
+
+def _plan_verify_section(ctx: RunContext) -> list[str]:
+    ver = ctx.state.get("plan_verify")
+    fixes = ctx.state.get("plan_revisions", [])
+    feedback = ctx.state.get("plan_feedback", [])
+    if not ver and not feedback:
+        return []
+    lines = ["## Plan doğrulaması (Doğrulayıcı)", ""]
+    if feedback:
+        lines += ["Planın önceki sürümü şu gerekçelerle reddedildi; bu plan onlara göre yeniden üretildi:", ""]
+        lines += [f"- {r}" for r in feedback] + [""]
+    if not ver:
+        return lines
+    c = ver["counts"]
+    lines.append(f"Son tur ({ver['round']}): {c['verified']} doğrulandı, {c['incorrect']} yanlış, "
+                 f"{c['unverifiable']} doğrulanamadı.")
+    if fixes:
+        lines += ["", f"**Doğrulayıcı'nın düzelttirdikleri** ({len(fixes)} revizyon):", ""]
+        lines += [f"- {f}" for r in fixes for f in r["feedback"]]
+    problems = [cl for cl in ver["claims"] if cl["verdict"] != "verified"]
+    if problems:
+        lines += ["", "> ⚠️ Son turda hâlâ sorunlu iddialar var; onaylamadan önce kontrol edin.", "",
+                  "| Sonuç | Madde | İddia | Not | Kaynak |", "|---|---|---|---|---|"]
+        for cl in problems:
+            note = (f"doğrusu: {cl['correct']}. " if cl["correct"] else "") + cl["explanation"]
+            lines.append(f"| {_ICON.get(cl['verdict'], cl['verdict'])} | {cl['item']} | {cl['claim']} | {note} | {_source_links(cl)} |")
+    lines += ["", f"<details><summary>Tüm iddialar ({len(ver['claims'])})</summary>", "",
+              "| Sonuç | İddia | Kaynak |", "|---|---|---|"]
+    lines += [f"| {_ICON.get(cl['verdict'], cl['verdict'])} | {cl['claim']} | {_source_links(cl)} |" for cl in ver["claims"]]
+    lines += ["", "</details>"]
+    lines += _grounding_note(ver) + [""]
     return lines
 
 
@@ -91,24 +147,16 @@ def _short_section(ctx: RunContext, i: int) -> list[str]:
         lines += ["", f"### Doğrulama (tur {ver['round']}): {c['verified']} doğrulandı, {c['incorrect']} yanlış, "
                       f"{c['unverifiable']} doğrulanamadı", "",
                   "| Sonuç | Sahne | İddia | Not | Kaynak |", "|---|---|---|---|---|"]
-        icon = {"verified": "✅", "incorrect": "❌", "unverifiable": "⚠️"}
         for cl in ver["claims"]:
-            titles = cl.get("source_titles") or [str(n) for n in range(1, len(cl["source_urls"]) + 1)]
-            src = " ".join(f"[{t}]({u})" for t, u in list(zip(titles, cl["source_urls"]))[:3])
             note = (f"doğrusu: {cl['correct']}. " if cl["correct"] else "") + cl["explanation"]
-            lines.append(f"| {icon.get(cl['verdict'], cl['verdict'])} | {cl['scene']} | {cl['claim']} | {note} | {src} |")
+            lines.append(f"| {_ICON.get(cl['verdict'], cl['verdict'])} | {cl['scene']} | {cl['claim']} | {note} | {_source_links(cl)} |")
         if ver.get("sources"):
             lines += ["", "<details><summary>Arama kaynakları</summary>", ""]
             lines += [f"- [{s['title'] or s['uri']}]({s['uri']})" for s in ver["sources"]]
             lines += ["", "</details>"]
         if c["incorrect"] or c["unverifiable"]:
             lines += ["", "> ⚠️ Son doğrulama turunda hâlâ sorunlu iddialar var; yayından önce kontrol edin."]
-        if not ver.get("grounded", False):
-            lines += ["", "> ⚠️ Bu turda Google araması YAPILMADI: sonuçlar ve linkler modelin kendi bilgisine "
-                          "dayanıyor, arama sonucu değil. Rakamları elle kontrol edin."]
-        else:
-            lines += ["", f"_{len(ver.get('queries', []))} Google araması yapıldı: "
-                          + "; ".join(f"“{q}”" for q in ver.get("queries", [])[:6]) + "_"]
+        lines += _grounding_note(ver)
 
     if qa:
         lines += ["", f"### QA (tur {qa['round']}): ortalama {qa['average']}/5, en düşük {qa['min']}/5", "",
