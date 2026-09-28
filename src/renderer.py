@@ -148,8 +148,35 @@ TARGET_TRUE_PEAK = -1.5
 TARGET_LRA = 11.0
 
 
-def normalize_loudness(video: Path) -> None:
-    """Videonun sesini iki geçişli loudnorm ile TARGET_LUFS'a getirir (görüntü kopyalanır)."""
+# Her oynatıcıda (Windows Filmler ve TV, QuickTime, tarayıcılar, telefonlar, sosyal medya
+# yükleyicileri) açılan standart teslim biçimi. Remotion JPEG kareleri tam aralıklı
+# `yuvj420p` (pc range, BT.470BG) üretiyor; bazı oynatıcı/donanım kod çözücüler bunu açmıyor
+# ya da renkleri yanlış gösteriyor. Bu yüzden görüntü her zaman sınırlı aralıklı BT.709
+# yuv420p'ye yeniden kodlanır.
+VIDEO_ENCODE_ARGS = [
+    "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+    "-profile:v", "high", "-level:v", "4.0", "-pix_fmt", "yuv420p",
+    "-color_range", "tv", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+    # Renk etiketleri bitstream'e de yazılır (ffmpeg bayrakları tek başına "unknown" bırakıyordu).
+    "-x264-params", "colorprim=bt709:transfer=bt709:colormatrix=bt709:fullrange=off",
+    "-tag:v", "avc1",
+]
+# Kaynak kareler tam aralıklı BT.601 (470bg) geliyor; renk kaymasın diye aralık ve matris
+# zscale ile dönüştürülür. (swscale `scale` bu parametreleri yok sayıp görüntüyü ~2/255
+# koyulaştırıyordu; zscale parlaklığı koruyor - ölçüm: ortalama 51,5 -> 51,1, PSNR 41,6 dB.)
+_ZSCALE_FILTER = "zscale=rangein=full:range=limited:matrixin=470bg:matrix=709,format=yuv420p"
+_SCALE_FILTER = "scale=in_range=full:out_range=limited:in_color_matrix=bt601:out_color_matrix=bt709,format=yuv420p"
+AUDIO_ENCODE_ARGS = ["-c:a", "aac", "-profile:a", "aac_low", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
+
+
+def _video_filter() -> str:
+    """zscale (libzimg) varsa onu, yoksa swscale'i kullanır."""
+    filters = subprocess.run(["ffmpeg", "-hide_banner", "-filters"], capture_output=True, text=True).stdout
+    return _ZSCALE_FILTER if " zscale " in filters else _SCALE_FILTER
+
+
+def _loudnorm_filter(video: Path) -> str | None:
+    """İki geçişli loudnorm'un ikinci geçiş filtresi; ses sessizse (ör. dry-run) None."""
     base = f"loudnorm=I={TARGET_LUFS}:TP={TARGET_TRUE_PEAK}:LRA={TARGET_LRA}"
     probe = subprocess.run(
         ["ffmpeg", "-hide_banner", "-i", str(video), "-map", "0:a", "-af", f"{base}:print_format=json", "-f", "null", "-"],
@@ -157,32 +184,49 @@ def normalize_loudness(video: Path) -> None:
     )
     try:
         stats = json.loads(probe.stderr[probe.stderr.rindex("{"):probe.stderr.rindex("}") + 1])
-    except ValueError:
-        raise RenderError(f"loudnorm ölçümü okunamadı:\n{probe.stderr[-1500:]}")
-    # Sessiz ses (ör. dry-run) -inf ölçülür; yükseltilecek bir şey yok, olduğu gibi bırakılır.
-    try:
         measured = float(stats["input_i"])
-    except (KeyError, ValueError):
+    except (ValueError, KeyError):
         measured = float("-inf")
     if not measured > -70:
-        print(f"      Ses: {stats.get('input_i')} LUFS (sessiz), normalizasyon atlandı")
-        return
-    second = (
+        print("      Ses: sessiz, normalizasyon atlandı")
+        return None
+    print(f"      Ses: {measured:.1f} LUFS -> {TARGET_LUFS:.0f} LUFS")
+    return (
         f"{base}:measured_I={stats['input_i']}:measured_TP={stats['input_tp']}"
         f":measured_LRA={stats['input_lra']}:measured_thresh={stats['input_thresh']}"
         f":offset={stats['target_offset']}:linear=true"
     )
-    tmp = video.with_name(video.stem + ".norm.mp4")
+
+
+def normalize_loudness(video: Path) -> None:
+    """Son teslim adımı (her render'da): sesi -14 LUFS'a normalize eder ve dosyayı standart,
+    her oynatıcıda açılan biçime yeniden kodlar - H.264 High@4.0 yuv420p (BT.709, sınırlı
+    aralık) + AAC-LC 48 kHz stereo + faststart (moov dosya başında)."""
+    loudnorm = _loudnorm_filter(video)
+    audio_filter = f"{loudnorm + ',' if loudnorm else ''}aresample=48000,aformat=channel_layouts=stereo"
+    tmp = video.with_name(video.stem + ".final.mp4")
     result = subprocess.run(
-        ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-map", "0:v", "-map", "0:a", "-c:v", "copy",
-         "-af", f"{second},aresample=48000", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(tmp)],
+        ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-map", "0:v:0", "-map", "0:a:0",
+         "-vf", _video_filter(), *VIDEO_ENCODE_ARGS,
+         "-af", audio_filter, *AUDIO_ENCODE_ARGS,
+         "-movflags", "+faststart", str(tmp)],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if result.returncode != 0:
         tmp.unlink(missing_ok=True)
-        raise RenderError(f"ses normalizasyonu başarısız:\n{result.stderr[-1500:]}")
+        raise RenderError(f"son kodlama başarısız:\n{result.stderr[-1500:]}")
     tmp.replace(video)
-    print(f"      Ses: {float(stats['input_i']):.1f} LUFS -> {TARGET_LUFS:.0f} LUFS")
+    print("      Kodlama: H.264 High@4.0 yuv420p BT.709 + AAC-LC 48 kHz stereo + faststart")
+
+
+def extract_audio(video: Path, dest: Path) -> Path:
+    """Videonun ses kanalını ayrıca dinlemek için MP3 olarak çıkarır (48 kHz stereo, 192 kb/s)."""
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-vn", "-map", "0:a:0",
+         "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "48000", "-ac", "2", str(dest)],
+        check=True,
+    )
+    return dest
 
 
 def extract_frames(video: Path, dest_dir: Path, every_seconds: float = 2.0) -> list[Path]:
