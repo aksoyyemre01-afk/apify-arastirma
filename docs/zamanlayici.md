@@ -26,17 +26,18 @@ siz              python pipeline.py --approve        -> videolar yayina-hazir\<h
 
 ## Kurulum — yöntem 1: PowerShell (önerilen, tek komut)
 
-PowerShell'i **normal kullanıcı olarak** açın (yönetici gerekmez) ve yolu kendi repo
-klasörünüze göre düzenleyip çalıştırın:
+PowerShell'i **normal kullanıcı olarak** açın (yönetici gerekmez), **proje klasörüne geçin**
+(`cd <proje klasörü>`) ve çalıştırın. Klasör yolu bulunduğunuz yerden alınır; hiçbir yolu
+elle yazmanız gerekmez:
 
 ```powershell
-$repo = "C:\Users\Emre.Aksoy\apify-arastirma"
+$repo = (Get-Location).Path
 $action  = New-ScheduledTaskAction -Execute "$repo\.venv\Scripts\pythonw.exe" -Argument "pipeline.py --week" -WorkingDirectory $repo
 $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At 08:00
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 1) `
             -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName "ShortPipeline-Haftalik" -Action $action -Trigger $trigger -Settings $settings `
-            -Description "Haftalık short konusu ve plan (pipeline.py --week)"
+            -Description "Haftalık short konusu ve plan (pipeline.py --week)" -Force
 ```
 
 - `-StartWhenAvailable`: bilgisayar pazartesi 08:00'de kapalıysa, açıldığında görev
@@ -54,9 +55,10 @@ Register-ScheduledTask -TaskName "ShortPipeline-Haftalik" -Action $action -Trigg
 3. **Tetikleyiciler** → **Yeni...** → "Zamanlamaya göre", **Haftalık**, başlangıç saati
    `08:00`, **Pazartesi** işaretli → Tamam.
 4. **Eylemler** → **Yeni...** → "Program başlat":
-   - Program/komut dosyası: `C:\Users\Emre.Aksoy\apify-arastirma\.venv\Scripts\pythonw.exe`
+   - Program/komut dosyası: `<proje klasörü>\.venv\Scripts\pythonw.exe`
    - Bağımsız değişkenler: `pipeline.py --week`
-   - Başlama yeri: `C:\Users\Emre.Aksoy\apify-arastirma`
+   - Başlama yeri: `<proje klasörü>`
+   (`<proje klasörü>` yerine projenin tam yolunu yazın; Görev Zamanlayıcı göreli yol kabul etmez.)
    (`pythonw.exe` konsolsuzdur; `python.exe` yazarsanız her pazartesi bir pencere açılır.)
 5. **Koşullar**: "Bilgisayar AC güçteyse başlat" işaretini kaldırın (dizüstünde pilde de çalışsın).
 6. **Ayarlar**:
@@ -66,12 +68,30 @@ Register-ScheduledTask -TaskName "ShortPipeline-Haftalik" -Action $action -Trigg
 
 ## Kurulum — yöntem 3: schtasks (tek satır)
 
+Komut İstemi'nde (cmd) **proje klasörüne geçip** çalıştırın; `%CD%` bulunduğunuz klasörün yoludur:
+
 ```bat
-schtasks /Create /TN "ShortPipeline-Haftalik" /TR "\"C:\Users\Emre.Aksoy\apify-arastirma\.venv\Scripts\pythonw.exe\" \"C:\Users\Emre.Aksoy\apify-arastirma\pipeline.py\" --week" /SC WEEKLY /D MON /ST 08:00 /F
+schtasks /Create /TN "ShortPipeline-Haftalik" /TR "\"%CD%\.venv\Scripts\pythonw.exe\" \"%CD%\pipeline.py\" --week" /SC WEEKLY /D MON /ST 08:00 /F
 ```
 
 Bu yöntemde "kaçırılırsa çalıştır" seçeneği ve çalışma klasörü ayarı yoktur (pipeline kendi
 klasörünü bulur); "kaçırılırsa çalıştır" için arayüzden 6. adımı yapın.
+
+## Proje klasörü taşınırsa ya da adı değişirse
+
+Kod ve dokümanlar hiçbir sabit klasör yolu içermez; tüm yollar projenin kendi konumundan
+hesaplanır. Ancak **zamanlanmış görev, oluşturulduğu andaki tam yolu saklar**. Klasörün adını
+değiştirdikten sonra görevi yeni klasörde yeniden oluşturun (yukarıdaki yöntemlerden birini
+yeni klasörde tekrar çalıştırmanız yeterli; `-Force`/`/F` ile eskisinin üzerine yazılır).
+
+`.venv` de oluşturulduğu klasörün yolunu içerir; klasör taşınınca bozulabilir. Bozulursa
+yeniden oluşturun:
+
+```powershell
+Remove-Item -Recurse -Force .venv
+python -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt
+```
 
 ## Test ve kontrol
 
