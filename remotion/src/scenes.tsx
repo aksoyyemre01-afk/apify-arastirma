@@ -1,6 +1,6 @@
 import React from 'react';
-import {AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig} from 'remotion';
-import {Counter, Label, LogoCard, SceneFrame, fitFont} from './components';
+import {AbsoluteFill, interpolate, useCurrentFrame} from 'remotion';
+import {Counter, EASE_IN_OUT, Label, LogoCard, MOVING, SceneFrame, enterProgress, fitFont, px} from './components';
 import {BODY, HEADING, LAYOUT} from './theme';
 import {useTheme} from './theme';
 import {
@@ -12,6 +12,9 @@ import {
   SceneProps,
   TimelineScene,
 } from './types';
+
+// Titreme önleme (bkz. components.tsx): bu dosyada scale/rotate yok; tüm hareket opacity
+// ve tam piksele yuvarlanmış translate ile, konumlar tam piksel, easing'ler yumuşak.
 
 const clamp = {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'} as const;
 const CONTENT_W = 1080 - LAYOUT.sidePadding * 2;
@@ -36,15 +39,12 @@ const Body: React.FC<{hasChips: boolean; children: React.ReactNode; gap?: number
   </div>
 );
 
-const Pop: React.FC<{delay?: number; children: React.ReactNode; style?: React.CSSProperties}> = ({delay = 0, children, style}) => {
+// Giriş: yarı saydamdan tam görünüre ve 40 px aşağıdan yerine (ölçekleme yok).
+const Pop: React.FC<{delay?: number; children: React.ReactNode}> = ({delay = 0, children}) => {
   const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const s = spring({frame: frame - delay, fps, config: {damping: 11, mass: 0.6}});
-  // Yarı boyuttan başlar: sahne geçişlerinde ekran birkaç kare boyunca boş kalmaz.
+  const s = enterProgress(frame, delay, 12);
   return (
-    <div style={{transform: `scale(${interpolate(s, [0, 1], [0.55, 1])})`, opacity: Math.min(1, 0.3 + s * 1.2), ...style}}>
-      {children}
-    </div>
+    <div style={{opacity: 0.3 + 0.7 * s, transform: `translateY(${px((1 - s) * 40)}px)`, ...MOVING}}>{children}</div>
   );
 };
 
@@ -58,17 +58,16 @@ const StaggerText: React.FC<{
   font?: string;
 }> = ({text, size, highlight = [], delay = 0, weight = 800, font = HEADING}) => {
   const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
   const {palette} = useTheme();
   const norm = (w: string) => w.toLocaleLowerCase('tr').replace(/[^\p{L}\p{N}]/gu, '');
   const hl = new Set(highlight.flatMap((h) => h.split(/\s+/)).map(norm));
   const words = text.split(/\s+/).filter(Boolean);
   return (
-    <div lang="tr" style={{display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: `${size * 0.18}px ${size * 0.26}px`, maxWidth: CONTENT_W}}>
+    <div lang="tr" style={{display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: `${px(size * 0.18)}px ${px(size * 0.26)}px`, maxWidth: CONTENT_W}}>
       {words.map((w, i) => {
-        const s = spring({frame: frame - delay - i * 3, fps, config: {damping: 13}});
+        const s = enterProgress(frame, delay + i * 3, 12);
         const isHl = hl.has(norm(w));
-        const wipe = interpolate(frame - delay - i * 3 - 6, [0, 8], [0, 100], clamp);
+        const wipe = px(interpolate(frame - delay - i * 3 - 6, [0, 8], [0, 100], {...clamp, easing: EASE_IN_OUT}));
         return (
           <span
             key={i}
@@ -78,14 +77,13 @@ const StaggerText: React.FC<{
               fontSize: size,
               lineHeight: 1.12,
               color: isHl ? palette.card_text : palette.text,
-              padding: isHl ? `0 ${size * 0.16}px` : 0,
-              borderRadius: size * 0.14,
-              background: isHl
-                ? `linear-gradient(90deg, ${palette.accent} ${wipe}%, transparent ${wipe}%)`
-                : 'transparent',
-              transform: `translateY(${(1 - s) * 40}px)`,
+              padding: isHl ? `0 ${px(size * 0.16)}px` : 0,
+              borderRadius: px(size * 0.14),
+              background: isHl ? `linear-gradient(90deg, ${palette.accent} ${wipe}%, transparent ${wipe}%)` : 'transparent',
+              transform: `translateY(${px((1 - s) * 40)}px)`,
               opacity: s,
               display: 'inline-block',
+              ...MOVING,
             }}
           >
             {w}
@@ -99,7 +97,7 @@ const StaggerText: React.FC<{
 // ---------------------------------------------------------------- logo_intro
 const LogoIntro: React.FC<{s: LogoIntroScene}> = ({s}) => {
   const frame = useCurrentFrame();
-  const sweep = interpolate(frame, [6, 30], [-60, 160], clamp);
+  const sweep = px(interpolate(frame, [6, 30], [-60, 160], {...clamp, easing: EASE_IN_OUT}));
   return (
     <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
       <Body hasChips={s.chips.length > 0} gap={60}>
@@ -163,12 +161,11 @@ const BigNumber: React.FC<{s: BigNumberScene}> = ({s}) => {
 // ---------------------------------------------------------------- comparison
 const Comparison: React.FC<{s: ComparisonScene}> = ({s}) => {
   const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
   const {palette} = useTheme();
-  const vs = spring({frame: frame - 8, fps, config: {damping: 9}});
+  const vs = enterProgress(frame, 8, 10);
   const hlOn = s.variant > 0 || frame > 20;
   const card = (ref: ComparisonScene['left'], value: string, side: 'left' | 'right') => {
-    const enter = spring({frame: frame - (side === 'left' ? 0 : 4), fps, config: {damping: 14}});
+    const enter = enterProgress(frame, side === 'left' ? 0 : 4, 14);
     const isHl = s.highlight === side;
     const dim = hlOn && s.highlight !== '' && !isHl;
     return (
@@ -178,10 +175,15 @@ const Comparison: React.FC<{s: ComparisonScene}> = ({s}) => {
           flexDirection: 'column',
           alignItems: 'center',
           gap: 34,
-          transform: `translateX(${(1 - enter) * (side === 'left' ? -500 : 500)}px) scale(${hlOn && isHl ? 1.07 : 1})`,
+          transform: `translateX(${px((1 - enter) * (side === 'left' ? -500 : 500))}px)`,
+          ...MOVING,
         }}
       >
-        {ref ? <LogoCard logo={ref} width={340} height={220} dim={dim} /> : <div style={{width: 340, height: 220}} />}
+        {ref ? (
+          <LogoCard logo={ref} width={340} height={220} dim={dim} highlight={hlOn && isHl} />
+        ) : (
+          <div style={{width: 340, height: 220}} />
+        )}
         {value ? (
           <div
             lang="tr"
@@ -200,9 +202,8 @@ const Comparison: React.FC<{s: ComparisonScene}> = ({s}) => {
       </div>
     );
   };
-  const focusX = s.variant > 0 && s.highlight ? (s.highlight === 'left' ? 380 : 700) : 540;
   return (
-    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} focus={{x: focusX, y: 700}} chips={s.chips}>
+    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
       <Body hasChips={s.chips.length > 0} gap={70}>
         {s.label ? <StaggerText text={s.label} size={62} weight={800} /> : null}
         <div style={{display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 20, width: 1080}}>
@@ -222,8 +223,10 @@ const Comparison: React.FC<{s: ComparisonScene}> = ({s}) => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transform: `scale(${vs}) rotate(${(1 - vs) * -90}deg)`,
+              opacity: vs,
+              transform: `translateY(${px((1 - vs) * 30)}px)`,
               flexShrink: 0,
+              ...MOVING,
             }}
           >
             VS
@@ -239,32 +242,47 @@ const Comparison: React.FC<{s: ComparisonScene}> = ({s}) => {
 const Timeline: React.FC<{s: TimelineScene}> = ({s}) => {
   const frame = useCurrentFrame();
   const {palette} = useTheme();
-  const draw = interpolate(frame, [0, 22], [0, 100], clamp);
-  const dotPulse = 1 + Math.sin(frame / 4) * 0.12;
+  const draw = interpolate(frame, [0, 22], [0, 1], {...clamp, easing: EASE_IN_OUT});
+  const lineW = px(CONTENT_W * draw);
+  // Nabız, noktanın boyutuyla değil etrafındaki halkanın parlaklığıyla verilir.
+  const ring = 0.12 + (Math.sin(frame / 4) + 1) * 0.1;
+  const dotOn = enterProgress(frame, 11, 8);
   return (
     <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
       <Body hasChips={s.chips.length > 0} gap={50}>
         <Pop>
-          <div style={{fontFamily: HEADING, fontWeight: 900, fontSize: fitFont(s.year, CONTENT_W, 250, 0.66), color: palette.accent, lineHeight: 1}}>
+          <div
+            style={{
+              fontFamily: HEADING,
+              fontWeight: 900,
+              fontSize: fitFont(s.year, CONTENT_W, 250, 0.66),
+              color: palette.accent,
+              lineHeight: 1,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
             <Counter value={s.year} animate={s.variant === 0} durationInFrames={22} />
           </div>
         </Pop>
         <div style={{position: 'relative', width: CONTENT_W, height: 60}}>
-          <div style={{position: 'absolute', top: 26, left: 0, height: 8, width: `${draw}%`, background: `${palette.text}55`, borderRadius: 8}} />
+          <div style={{position: 'absolute', top: 26, left: 0, height: 8, width: lineW, background: `${palette.text}55`, borderRadius: 8}} />
           {[0.1, 0.3, 0.7, 0.9].map((p) => (
-            <div key={p} style={{position: 'absolute', top: 18, left: `${p * 100}%`, width: 4, height: 24, background: `${palette.text}44`, opacity: draw / 100 > p ? 1 : 0}} />
+            <div
+              key={p}
+              style={{position: 'absolute', top: 18, left: px(CONTENT_W * p), width: 4, height: 24, background: `${palette.text}44`, opacity: draw > p ? 1 : 0}}
+            />
           ))}
           <div
             style={{
               position: 'absolute',
-              top: 30 - 28,
-              left: `calc(50% - 28px)`,
+              top: 2,
+              left: px(CONTENT_W / 2) - 28,
               width: 56,
               height: 56,
               borderRadius: 56,
               background: palette.accent,
-              boxShadow: `0 0 0 ${14 * dotPulse}px ${palette.accent}33`,
-              transform: `scale(${draw >= 50 ? dotPulse : 0})`,
+              boxShadow: `0 0 0 14px ${palette.accent}${px(ring * 255).toString(16).padStart(2, '0')}`,
+              opacity: dotOn,
             }}
           />
         </div>
@@ -286,25 +304,25 @@ const Chart: React.FC<{s: ChartScene}> = ({s}) => {
   const min = Math.min(...s.points);
   const max = Math.max(...s.points);
   const range = max - min || 1;
+  // Tam piksel koordinatlar: çizgi kenarları kareden kareye aynı piksellere oturur.
   const pts = s.points.map((v, i) => ({
-    x: pad + (i / (s.points.length - 1)) * (W - pad * 2),
-    y: pad + (1 - (v - min) / range) * (H - pad * 2),
+    x: px(pad + (i / (s.points.length - 1)) * (W - pad * 2)),
+    y: px(pad + (1 - (v - min) / range) * (H - pad * 2)),
   }));
-  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ');
   const area = `${path} L${pts[pts.length - 1].x},${H} L${pts[0].x},${H} Z`;
-  const progress = s.variant > 0 ? 1 : interpolate(frame, [4, 34], [0, 1], clamp);
+  // Çizim iki uçta yavaşlayan easing ile; açılma genişliği tam piksel.
+  const progress = s.variant > 0 ? 1 : interpolate(frame, [4, 34], [0, 1], {...clamp, easing: EASE_IN_OUT});
+  const revealW = px(W * progress) + 10;
   const end = pts[pts.length - 1];
   const endShown = progress >= 0.98;
+  const badgeIn = s.variant > 0 ? 1 : enterProgress(frame, 34, 10);
+  const ring = 0.25 + (Math.sin(frame / 4) + 1) * 0.15;
   const arrow = s.direction === 'down' ? '▼' : '▲';
   const bodyTop = s.chips.length ? LAYOUT.contentTopWithChips : LAYOUT.contentTop;
   const chartTop = bodyTop + 150;
   return (
-    <SceneFrame
-      durationInFrames={s.durationInFrames}
-      variant={s.variant}
-      focus={{x: LAYOUT.sidePadding + end.x, y: chartTop + end.y}}
-      chips={s.chips}
-    >
+    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
       <div
         style={{
           position: 'absolute',
@@ -331,20 +349,38 @@ const Chart: React.FC<{s: ChartScene}> = ({s}) => {
             <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
           <clipPath id="reveal">
-            <rect x={0} y={-50} width={W * progress + 10} height={H + 100} />
+            <rect x={0} y={-50} width={revealW} height={H + 100} />
           </clipPath>
         </defs>
         {[0.25, 0.5, 0.75].map((g) => (
-          <line key={g} x1={0} x2={W} y1={H * g} y2={H * g} stroke={palette.text} strokeOpacity={0.08} strokeWidth={3} />
+          <line key={g} x1={0} x2={W} y1={px(H * g)} y2={px(H * g)} stroke={palette.text} strokeOpacity={0.08} strokeWidth={3} />
         ))}
         <path d={area} fill="url(#area)" clipPath="url(#reveal)" />
         <path d={path} fill="none" stroke={color} strokeWidth={14} strokeLinecap="round" strokeLinejoin="round" clipPath="url(#reveal)" />
         {pts.map((p, i) => {
+          const last = i === pts.length - 1;
           const visible = progress >= i / (pts.length - 1) - 0.01;
-          return visible ? <circle key={i} cx={p.x} cy={p.y} r={i === pts.length - 1 ? 20 + Math.sin(frame / 4) * 4 : 11} fill={i === pts.length - 1 ? color : palette.text} /> : null;
+          if (!visible) return null;
+          return (
+            <g key={i}>
+              {/* Son noktanın nabzı: sabit yarıçaplı halkanın parlaklığı değişir. */}
+              {last ? <circle cx={p.x} cy={p.y} r={34} fill={color} opacity={ring} /> : null}
+              <circle cx={p.x} cy={p.y} r={last ? 20 : 11} fill={last ? color : palette.text} />
+            </g>
+          );
         })}
         {s.pointLabels.map((l, i) => (
-          <text key={i} x={pts[i].x} y={H + 58} fill={palette.muted} fontFamily={BODY} fontWeight={700} fontSize={36} textAnchor="middle" opacity={progress >= i / (pts.length - 1) - 0.01 ? 1 : 0}>
+          <text
+            key={i}
+            x={pts[i].x}
+            y={H + 58}
+            fill={palette.muted}
+            fontFamily={BODY}
+            fontWeight={700}
+            fontSize={36}
+            textAnchor="middle"
+            opacity={progress >= i / (pts.length - 1) - 0.01 ? 1 : 0}
+          >
             {l}
           </text>
         ))}
@@ -364,8 +400,9 @@ const Chart: React.FC<{s: ChartScene}> = ({s}) => {
             padding: '14px 30px',
             borderRadius: 26,
             boxShadow: '0 20px 50px rgba(0,0,0,0.4)',
-            transform: `scale(${s.variant > 0 ? 1 : interpolate(frame, [34, 42], [0.4, 1], clamp)})`,
-            transformOrigin: 'right center',
+            opacity: badgeIn,
+            transform: `translateX(${px((1 - badgeIn) * 40)}px)`,
+            ...MOVING,
           }}
         >
           {s.endValue}

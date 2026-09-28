@@ -87,9 +87,18 @@ Script her sahneyi 5-10 kelime (~2-3 sn) tutar. **Hiçbir sahne 3 sn'yi geçmez:
 daha uzun bir sahne parçalara bölünür ve ikinci parça FARKLI bir sahne tipidir
 (rakam kartı → markanın logo kartı, grafik → son değerin rakam kartı, karşılaştırma →
 vurgulanan tarafın logosu, diğerleri → o anda söylenen kelimelerin alıntı kartı).
-1 sn'den kısa sahneler komşusundan süre alır. Her sahnede animasyonlu giriş, sürekli
-yavaş zoom, sayaç efekti (rakam ve yıllar), çizilen grafikler ve hareketli zemin
-vardır; ekran hiç durağan kalmaz.
+1 sn'den kısa sahneler komşusundan süre alır. Her sahnede animasyonlu giriş, sayaç
+efekti (rakam ve yıllar), çizilen grafikler ve sürekli hareket eden zemin (yavaş zoom
+yapan gradyan, kayan ızgara ve parçacıklar) vardır; ekran hiç durağan kalmaz.
+
+**Titreme yok:** yazı, logo ve grafik katmanlarında `scale`/`rotate` kullanılmaz; her
+karede yeniden ölçeklenen yazı ve ince çizgiler kenarlarda titrer. Hareket yalnızca
+opacity ve tam piksele yuvarlanmış translate ile yapılır, zoom sadece arka plan
+gradyanına uygulanır. Nabız efektleri boyutla değil parlaklıkla verilir. Tüm rastgele
+değerler Remotion `random(seed)` ile sabittir. Konumlar tam piksel, hareketli katmanlarda
+`will-change: transform` var; giriş, sayaç ve çizimlerde yumuşak (bezier) easing kullanılır.
+Ölçüm (Enron, 10 kare/sn, durağan anlarda ardışık kare farkı): yazı piksellerinde
+0,26-0,83'ten ~0,005'e indi; kalan fark yalnızca arka planın bilinçli hareketi.
 
 Görsel çeşitlilik: zemin tonu sahneye göre hafifçe değişir (yükseliş/zirve
 yeşilimsi, düşüş/kayıp kırmızımsı, rakam/logo kartları vurgu rengi, zaman çizelgesi

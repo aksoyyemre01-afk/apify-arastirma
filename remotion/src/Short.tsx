@@ -1,15 +1,6 @@
 import React from 'react';
-import {
-  AbsoluteFill,
-  Audio,
-  Sequence,
-  interpolate,
-  spring,
-  staticFile,
-  useCurrentFrame,
-  useVideoConfig,
-} from 'remotion';
-import {Background, Tint} from './components';
+import {AbsoluteFill, Audio, Sequence, interpolate, staticFile, useCurrentFrame} from 'remotion';
+import {Background, EASE_IN_OUT, MOVING, Tint, enterProgress, px} from './components';
 import {SceneView} from './scenes';
 import {BODY, HEADING, LAYOUT, ThemeProvider, useTheme} from './theme';
 import {CaptionPage, LogoRef, Outro as OutroProps, SceneProps, ShortProps} from './types';
@@ -39,9 +30,9 @@ const CAPTION_STROKE = 12;
 const CAPTION_WORD_GAP = Math.round(CAPTION_SIZE * 0.34) + CAPTION_STROKE;
 const Caption: React.FC<{page: CaptionPage}> = ({page}) => {
   const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
   const {palette} = useTheme();
-  const pop = spring({frame, fps, config: {damping: 16, mass: 0.5}});
+  // Sayfa girişi ölçeksiz: kısa opacity + 20 px yukarı kayma (yazı titremez).
+  const pop = enterProgress(frame, 0, 6);
   return (
     <div
       style={{
@@ -62,7 +53,9 @@ const Caption: React.FC<{page: CaptionPage}> = ({page}) => {
           flexWrap: 'wrap',
           justifyContent: 'center',
           gap: `0 ${CAPTION_WORD_GAP}px`,
-          transform: `scale(${interpolate(pop, [0, 1], [0.85, 1])})`,
+          opacity: pop,
+          transform: `translateY(${px((1 - pop) * 20)}px)`,
+          ...MOVING,
         }}
       >
         {page.words.map((w, i) => {
@@ -97,11 +90,10 @@ const Caption: React.FC<{page: CaptionPage}> = ({page}) => {
 // Metin config/brand.json'dan gelir; boşsa hiç çizilmez.
 const Badge: React.FC<{text: string; intro: boolean}> = ({text, intro}) => {
   const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
   const {palette} = useTheme();
   if (!text) return null;
-  const s = intro ? spring({frame, fps, config: {damping: 15}}) : 1;
-  const sweep = intro ? interpolate(frame, [0, 16], [0, 120], clamp) : 120;
+  const s = intro ? enterProgress(frame, 0, 14) : 1;
+  const sweep = intro ? px(interpolate(frame, [0, 16], [0, 120], {...clamp, easing: EASE_IN_OUT})) : 120;
   return (
     <div
       style={{
@@ -131,7 +123,8 @@ const Badge: React.FC<{text: string; intro: boolean}> = ({text, intro}) => {
           background: palette.accent,
           padding: '10px 30px',
           borderRadius: 16,
-          transform: `translateY(${(1 - s) * -120}px)`,
+          transform: `translateY(${px((1 - s) * -120)}px)`,
+          ...MOVING,
         }}
       >
         {text}
@@ -150,11 +143,10 @@ const Badge: React.FC<{text: string; intro: boolean}> = ({text, intro}) => {
 // ---------------------------------------------------------------- outro (kural 4, 7)
 const Outro: React.FC<{o: OutroProps}> = ({o}) => {
   const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
   const {palette} = useTheme();
-  const s = spring({frame, fps, config: {damping: 14}});
+  const s = enterProgress(frame, 0, 12);
   const words = o.cta.split(/\s+/).filter(Boolean);
-  const pulse = 1 + Math.sin(frame / 4) * 0.04;
+  const button = enterProgress(frame, 12, 10);
   return (
     <AbsoluteFill style={{background: `${palette.background}F2`, opacity: interpolate(frame, [0, 6], [0, 1], clamp)}}>
       <div
@@ -173,16 +165,16 @@ const Outro: React.FC<{o: OutroProps}> = ({o}) => {
         }}
       >
         {o.seriesName ? (
-          <div lang="tr" style={{fontFamily: HEADING, fontWeight: 800, fontSize: 44, letterSpacing: 4, textTransform: 'uppercase', color: palette.accent, transform: `scale(${s})`}}>
+          <div lang="tr" style={{fontFamily: HEADING, fontWeight: 800, fontSize: 44, letterSpacing: 4, textTransform: 'uppercase', color: palette.accent, opacity: s, transform: `translateY(${px((1 - s) * 30)}px)`, ...MOVING}}>
             {o.seriesName}
           </div>
         ) : null}
         {words.length ? (
           <div lang="tr" style={{display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '10px 22px'}}>
             {words.map((w, i) => {
-              const ws = spring({frame: frame - 3 - i * 2, fps, config: {damping: 13}});
+              const ws = enterProgress(frame, 3 + i * 2, 12);
               return (
-                <span key={i} style={{fontFamily: HEADING, fontWeight: 900, fontSize: 88, lineHeight: 1.1, color: palette.text, opacity: ws, transform: `translateY(${(1 - ws) * 40}px)`, display: 'inline-block'}}>
+                <span key={i} style={{fontFamily: HEADING, fontWeight: 900, fontSize: 88, lineHeight: 1.1, color: palette.text, opacity: ws, transform: `translateY(${px((1 - ws) * 40)}px)`, display: 'inline-block', ...MOVING}}>
                   {w}
                 </span>
               );
@@ -205,7 +197,9 @@ const Outro: React.FC<{o: OutroProps}> = ({o}) => {
               background: palette.accent,
               padding: '22px 60px',
               borderRadius: 80,
-              transform: `scale(${interpolate(frame, [12, 20], [0, 1], clamp) * pulse})`,
+              opacity: button,
+              transform: `translateY(${px((1 - button) * 30)}px)`,
+              ...MOVING,
             }}
           >
             {o.followText} →
