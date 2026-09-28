@@ -149,7 +149,8 @@ export const LogoCard: React.FC<{
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const {palette} = useTheme();
-  const appear = spring({frame: frame - delay, fps, config: {damping: 12, mass: 0.6}});
+  // Yarı boyuttan başlar: sahne geçişinde ekran birkaç kare boş kalmaz.
+  const appear = interpolate(spring({frame: frame - delay, fps, config: {damping: 12, mass: 0.6}}), [0, 1], [0.5, 1]);
   const revealAt = logo.revealAt;
   const concealed = logo.hidden && (revealAt === null || frame < revealAt);
   const since = revealAt !== null ? frame - revealAt : 999;

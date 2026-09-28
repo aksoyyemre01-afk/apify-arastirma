@@ -322,12 +322,15 @@ def _split_long(segs: list[dict], timings: list[dict], main_brand: str) -> list[
         # Bir sonraki sahneyle aynı tipte olmayan aday öne alınır (art arda aynı kart olmasın).
         next_type = segs[idx + 1]["scene"]["scene_type"] if idx + 1 < len(segs) else ""
         alts.sort(key=lambda a: a["scene_type"] == next_type)
+        # Tek aday bile bir sonraki sahneyle aynı tipteyse (ör. alıntının tek alternatifi logo
+        # kartı ve ardından zaten logo kartı geliyor) ikinci parça aynı sahnenin yakın planıdır.
+        camera_cut_only = all(a["scene_type"] == next_type for a in alts)
         for k in range(n):
             start, end = seg["start"] + k * step, seg["start"] + (k + 1) * step
             part = dict(seg, start=start, end=end)
-            if k % 2 == 0:
+            if k % 2 == 0 or camera_cut_only:
                 # Orijinal sahne; tekrar ediyorsa yakın plan varyantıyla.
-                part["variant"] = seg.get("variant", 0) + k // 2
+                part["variant"] = seg.get("variant", 0) + (k if camera_cut_only else k // 2)
             else:
                 alt = dict(seg["scene"], **alts[(k // 2) % len(alts)], reveal=False)
                 if alt["scene_type"] == "quote" and not alt.get("text"):
@@ -482,12 +485,21 @@ def _scene_props(seg: dict, reg: _LogoRegistry, mystery: str, reveal_t: float | 
         "tone": _tone(s),
     }
 
+    # Sahnede zaten büyük gösterilen markalar çip olarak tekrar edilmez (ör. gizli marka hem
+    # büyük "?" kartı hem de küçük "?" çipi olarak görünmesin).
+    if t == "logo_intro":
+        big = {_norm(s.get("brand", "") or mystery)}
+    elif t == "comparison":
+        big = {_norm(s.get("left_brand", "")), _norm(s.get("right_brand", ""))}
+    else:
+        big = set()
     chip_names = []
-    if t != "logo_intro" and s.get("brand") and _norm(s["brand"]) not in {
-        _norm(s.get("left_brand", "")), _norm(s.get("right_brand", ""))
-    }:
+    if s.get("brand") and _norm(s["brand"]) not in big:
         chip_names.append(s["brand"])
-    chip_names += [c for c in seg.get("chips", []) if _norm(c) not in {_norm(n) for n in chip_names}]
+    chip_names += [
+        c for c in seg.get("chips", [])
+        if _norm(c) not in big and _norm(c) not in {_norm(n) for n in chip_names}
+    ]
     props["chips"] = [_logo_ref(c, seg, reg, mkey, reveal_t) for c in chip_names[:2]]
 
     if t == "logo_intro":

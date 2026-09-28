@@ -151,6 +151,54 @@ def _report_actual_timing(script: ShortScript, timings: list[dict]) -> None:
     print(line)
 
 
+def _brand_spoken_at(script: ShortScript, timings: list[dict]) -> float | None:
+    from src.scene_planner import _find_spoken
+
+    return _find_spoken(script.mystery_brand or script.main_brand, timings)
+
+
+def _save_script(video_dir: Path, topic: dict, script: ShortScript, part_info: dict | None) -> None:
+    from src.script_writer import dump_script
+
+    (video_dir / "script.md").write_text(_script_md(topic, script), encoding="utf-8")
+    extra = {"company": topic.get("company", ""), "topic_context": topic.get("angle", "")}
+    if part_info:
+        extra["series_part"] = part_info
+    (video_dir / "script.json").write_text(dump_script(script, extra), encoding="utf-8")
+
+
+def _synthesize(video_dir: Path, script: ShortScript) -> list[dict] | None:
+    from src import tts
+
+    timings = tts.synthesize_with_timestamps(script.narration_full, str(video_dir / "audio.mp3"))
+    if timings:
+        (video_dir / "word_timings.json").write_text(json.dumps(timings, ensure_ascii=False, indent=2), encoding="utf-8")
+        _report_actual_timing(script, timings)
+    return timings
+
+
+def _synthesize_checked(video_dir: Path, topic: dict, script: ShortScript, part_info: dict | None) -> ShortScript:
+    """Seslendirir; gizemli markanın GERÇEK söylenme anı MYSTERY_BRAND_DEADLINE'ı aşarsa
+    (kural 2) açılışı TEK bir Gemini isteğiyle düzeltip sesi BİR kez yeniden üretir.
+    Yerel tahmin açılışta ±0,8 sn sapabildiği için kesin kontrol burada yapılır."""
+    from src import script_writer as sw
+
+    timings = _synthesize(video_dir, script)
+    if not timings or script.hook_type != "mystery":
+        return script
+    at = _brand_spoken_at(script, timings)
+    if at is not None and at <= sw.MYSTERY_BRAND_DEADLINE:
+        return script
+    script = sw.fix_late_brand(script, at if at is not None else float("inf"))
+    _save_script(video_dir, topic, script, part_info)
+    print("   Ses yeniden üretiliyor (tek seferlik)...")
+    timings = _synthesize(video_dir, script)
+    at = _brand_spoken_at(script, timings) if timings else None
+    if at is None or at > sw.MYSTERY_BRAND_DEADLINE:
+        print("   UYARI: düzeltmeden sonra da marka geç; ek deneme yapılmıyor, bu haliyle kullanılacak.")
+    return script
+
+
 def _write_short(
     topic: dict,
     script: ShortScript,
@@ -161,26 +209,14 @@ def _write_short(
     prefix: str = "",
     part_info: dict | None = None,
 ) -> Path:
-    from src.script_writer import dump_script
-
     video_dir = out_dir / f"short-{prefix}{slugify(script.title)}"
     video_dir.mkdir(parents=True, exist_ok=True)
-    (video_dir / "script.md").write_text(_script_md(topic, script), encoding="utf-8")
-    extra = {"company": topic.get("company", ""), "topic_context": topic.get("angle", "")}
-    if part_info:
-        extra["series_part"] = part_info
-    (video_dir / "script.json").write_text(dump_script(script, extra), encoding="utf-8")
+    _save_script(video_dir, topic, script, part_info)
 
-    narration = script.narration_full
     if do_tts:
-        from src import tts
-
-        timings = tts.synthesize_with_timestamps(narration, str(video_dir / "audio.mp3"))
-        if timings:
-            (video_dir / "word_timings.json").write_text(json.dumps(timings, ensure_ascii=False, indent=2), encoding="utf-8")
-            _report_actual_timing(script, timings)
+        script = _synthesize_checked(video_dir, topic, script, part_info)
     elif dry_run and do_video:
-        _silent_audio_with_timings(narration, video_dir)
+        _silent_audio_with_timings(script.narration_full, video_dir)
 
     if do_video and (video_dir / "audio.mp3").exists():
         from src import renderer

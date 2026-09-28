@@ -13,6 +13,7 @@ tekrar denemez.
 import json
 import math
 import os
+import re
 import time
 
 from google import genai
@@ -278,23 +279,64 @@ def write_short_script(topic: dict, focus_block: str = "") -> ShortScript:
 # ---------------------------------------------------------------------------
 # Süre ve gizem kuralları (RULES.md kural 2 ve 4) - Gemini'ye gitmeden yerelde kontrol.
 #
-# Konuşma hızı, bu projedeki ElevenLabs seslendirmelerinden ölçüldü: boşluksuz ~12
-# karakter/sn (~1,95 kelime/sn; Yahoo 77 kelime = 39,1 sn, MySpace 96 kelime = 50,2 sn).
-# Ses/model değişirse yalnızca SPEECH_CHARS_PER_SEC güncellenir. Karakter bazlı tahmin
-# kelime bazlıdan daha isabetlidir (Türkçe kelime uzunlukları çok değişken): üç gerçek
-# seslendirmede toplam süre ±1,4 sn isabetle tahmin edildi. Açılış (hook) ortalamadan hızlı
-# okunuyor (13,2-14,1 kar/sn), bu yüzden markanın söylenme anı ayrı hızla tahmin edilir.
-SPEECH_CHARS_PER_SEC = 12.0
-OPENING_CHARS_PER_SEC = 13.7
+# Model, bu projedeki dört gerçek ElevenLabs seslendirmesinin (Yahoo x2, MySpace, Enron)
+# tüm kelime zamanlarına uydurulan: süre = okunuş_karakteri / hız + cümle_sonu x duraklama.
+# Rakamlar okunuşlarıyla sayılır ("63" -> "altmışüç"); aksi halde rakamlı açılışlar çok
+# kısa tahmin ediliyordu. Toplam süre ±1 sn isabetli. Açılışı ElevenLabs script'ten
+# script'e farklı hızda okuyor (açılış modeli bile ±0,8 sn sapıyor), bu yüzden gizemli
+# markanın zamanı burada yalnızca ERKEN FİLTREDİR (güvenlik paylı); kesin kontrol TTS'ten
+# sonra gerçek kelime zamanıyla yapılır (run.py). Ses/model değişirse sabitler yeniden ölçülür.
+SPEECH_CHARS_PER_SEC = 15.4
+SENTENCE_PAUSE_SEC = 0.73
+OPENING_CHARS_PER_SEC = 14.1
+OPENING_SENTENCE_PAUSE_SEC = 0.25
+MYSTERY_ESTIMATE_MARGIN = 0.7   # tahmin sapmasına karşı pay: tahmin <= 3,8 sn olmalı
 MIN_SECONDS = 30.0
 MAX_SECONDS = 45.0
 MYSTERY_BRAND_DEADLINE = 4.5
 TARGET_MIN_WORDS = 60   # ~31 sn
 TARGET_MAX_WORDS = 85   # ~44 sn
 
+_ONES = ("", "bir", "iki", "üç", "dört", "beş", "altı", "yedi", "sekiz", "dokuz")
+_TENS = ("", "on", "yirmi", "otuz", "kırk", "elli", "altmış", "yetmiş", "seksen", "doksan")
+_SENTENCE_END = (".", "?", "!", ":")
+
+
+def _number_words(n: int) -> str:
+    """Tam sayının Türkçe okunuşu (boşluksuz): 63 -> 'altmışüç', 1000 -> 'bin'."""
+    def below_1000(k: int) -> str:
+        h, r = divmod(k, 100)
+        return (("" if h == 1 else _ONES[h]) + "yüz" if h else "") + _TENS[r // 10] + _ONES[r % 10]
+
+    if n == 0:
+        return "sıfır"
+    out = ""
+    for scale, name in ((10**9, "milyar"), (10**6, "milyon"), (1000, "bin")):
+        q, n = divmod(n, scale)
+        if q:
+            out += ("" if (q == 1 and name == "bin") else below_1000(q)) + name
+    return out + below_1000(n)
+
+
+def _spoken_chars(word: str) -> int:
+    """Kelimenin okunuşundaki harf sayısı; rakamlar ve % okunuşuna çevrilir."""
+    def expand(m: re.Match) -> str:
+        s = m.group(0)
+        if re.fullmatch(r"\d{1,3}(\.\d{3})+", s):
+            return _number_words(int(s.replace(".", "")))
+        if re.search(r"[.,]", s):
+            whole, frac = re.split(r"[.,]", s, maxsplit=1)
+            return _number_words(int(whole)) + "virgül" + _number_words(int(frac))
+        return _number_words(int(s))
+
+    word = re.sub(r"\d+(?:[.,]\d+)*", expand, word.replace("%", "yüzde"))
+    return sum(ch.isalnum() for ch in word)
+
 
 def estimate_seconds(text: str) -> float:
-    return sum(len(w) for w in text.split()) / SPEECH_CHARS_PER_SEC
+    words = text.split()
+    pauses = sum(w.endswith(_SENTENCE_END) for w in words)
+    return sum(map(_spoken_chars, words)) / SPEECH_CHARS_PER_SEC + pauses * SENTENCE_PAUSE_SEC
 
 
 def estimate_mention_seconds(text: str, brand: str) -> float | None:
@@ -302,11 +344,12 @@ def estimate_mention_seconds(text: str, brand: str) -> float | None:
     key = _brand_key(brand)
     if not key:
         return None
-    before = 0
+    chars = pauses = 0
     for word in text.split():
         if _brand_key(word).startswith(key):
-            return before / OPENING_CHARS_PER_SEC
-        before += len(word)
+            return chars / OPENING_CHARS_PER_SEC + pauses * OPENING_SENTENCE_PAUSE_SEC
+        chars += _spoken_chars(word)
+        pauses += word.endswith(_SENTENCE_END)
     return None
 
 
@@ -339,7 +382,7 @@ def short_problems(script: ShortScript) -> list[str]:
         at = estimate_mention_seconds(text, brand)
         if at is None:
             problems.append(f"Gizemli hook'un cevabı olan '{brand}' seslendirmede hiç geçmiyor.")
-        elif at > MYSTERY_BRAND_DEADLINE:
+        elif at > MYSTERY_BRAND_DEADLINE - MYSTERY_ESTIMATE_MARGIN:
             problems.append(
                 f"'{brand}' seslendirmede tahminen {at:.1f}. saniyede söyleniyor; en geç "
                 f"{MYSTERY_BRAND_DEADLINE:g}. saniyede (ilk ~8 kelime içinde) söylenmeli. Açılışı kısalt."
@@ -370,6 +413,25 @@ def enforce_short_constraints(script: ShortScript) -> ShortScript:
         print(f"   Script kontrolü: {_summary(script)} - uygun.")
         return script
     print(f"   Script kontrolü: {_summary(script)} - düzeltme isteniyor (1 istek):")
+    return _revise(script, problems)
+
+
+def fix_late_brand(script: ShortScript, spoken_at: float) -> ShortScript:
+    """TTS sonrası kesin kontrol (kural 2): gizemli marka gerçekte `spoken_at` saniyede
+    söylendiyse ve bu MYSTERY_BRAND_DEADLINE'ı aşıyorsa TEK bir düzeltme isteği gönderir."""
+    brand = script.mystery_brand or script.main_brand
+    problems = [
+        f"Seslendirme üretildi ve '{brand}' gerçekte {spoken_at:.2f}. saniyede söylendi; en geç "
+        f"{MYSTERY_BRAND_DEADLINE:g}. saniyede söylenmeli. Açılışı belirgin şekilde kısalt: markadan "
+        f"önce en fazla ~6 kısa kelime kalsın (ör. tek kısa soru + \"Cevap: {brand}.\"); rakamları "
+        f"açılıştan çıkarıp sonraki sahnelere taşı."
+    ]
+    problems += [p for p in short_problems(script) if brand not in p]
+    print("   Marka geç söylendi - açılış düzeltmesi isteniyor (1 istek):")
+    return _revise(script, problems)
+
+
+def _revise(script: ShortScript, problems: list[str]) -> ShortScript:
     for p in problems:
         print(f"     - {p}")
     revised = _generate(

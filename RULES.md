@@ -46,8 +46,11 @@ Gemini her script'te `hook_type` (mystery/direct), `mystery_brand` ve
 `reveal_by_seconds` alanlarını üretir.
 
 **Uygulama:** `src/script_writer.py` (`HOOK_RULES`; `short_problems` markanın söylenme
-anını TTS'ten önce yerelde tahmin eder, geç kalıyorsa tek bir düzeltme isteği gider),
-`run.py` (`_report_actual_timing`: TTS sonrası gerçek anı raporlar), `src/scene_planner.py`
+anını TTS'ten önce yerelde tahmin eder - rakamlar okunuşuyla, cümle duraklamaları dahil -
+ve 0,7 sn güvenlik payıyla erken filtreler; bu tahmin açılışta ±0,8 sn sapabildiği için
+kesin kontrol TTS'ten sonradır), `run.py` (`_synthesize_checked`: gerçek kelime zamanında
+marka 4,5 sn'yi aşarsa `fix_late_brand` ile TEK bir açılış düzeltmesi istenir ve ses BİR
+kez yeniden üretilir; hâlâ geçse uyarı verilir), `src/scene_planner.py`
 (`_apply_mystery`: reveal anı markanın sesli söylendiği kelimedir, 5 sn'yi
 aşarsa 5 sn'ye çekilir; ilk sahnede gizli kutu yoksa eklenir; reveal anındaki
 sahne markayı büyük göstermiyorsa o andan itibaren logo reveal kartı konur;
