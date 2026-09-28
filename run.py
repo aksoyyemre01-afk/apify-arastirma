@@ -28,6 +28,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from src import proc
 from src import research, state  # noqa: E402
 from src.schemas import LongChapter, LongScript, Scene, ShortScript  # noqa: E402
 from src.utils import slugify  # noqa: E402
@@ -51,16 +52,17 @@ def _dry_run_short(topic: dict, suffix: str = "") -> ShortScript:
     c = topic.get("company") or "Şirket"
     rival = next(r for r in _DRY_RUN_RIVALS if r.lower() != c.lower())
     scenes = [
-        Scene(narration="Tek bir kararla 10 milyar dolar kaybeden şirketi biliyor musunuz?",
+        Scene(narration="10 milyar dolar kaybeden şirket hangisi?",
               scene_type="big_number", value="10", unit="MİLYAR $", label="Tek kararın bedeli"),
         Scene(narration=f"Cevap: {c}.", scene_type="logo_intro", brand=c, reveal=True),
         Scene(narration=f"{c}, 1998 yılında pazarın açık ara lideriydi.",
               scene_type="timeline", year="1998", text="Pazarın açık ara lideri", brand=c, mood="rise"),
         Scene(narration="Şirketin değeri 250 milyar dolara ulaştı.",
               scene_type="big_number", value="250", unit="MİLYAR $", label="Piyasa değeri", brand=c, mood="rise"),
-        Scene(narration=f"Sonra {rival} sahneye çıktı.",
-              scene_type="comparison", left_brand=c, right_brand=rival,
-              left_value="LİDER", right_value="YENİ RAKİP", highlight_side="right"),
+        Scene(narration=f"Sonra {rival} sahneye çıktı ve oyunun kurallarını değiştirdi.",
+              scene_type="comparison", left_brand=c, right_brand=rival, highlight_side="right", mood="fall"),
+        Scene(narration="Müşteriler birer birer yeni ürünlere geçmeye başladı.",
+              scene_type="quote", text="Müşteriler yeni ürünlere geçti", highlight=["geçti"], mood="fall"),
         Scene(narration="Satışlar birkaç yılda yüzde 88 çakıldı.",
               scene_type="chart", direction="down", points=[100, 92, 60, 31, 12],
               point_labels=["2007", "2008", "2009", "2010", "2011"], end_value="-%88", brand=c, mood="fall"),
@@ -68,6 +70,8 @@ def _dry_run_short(topic: dict, suffix: str = "") -> ShortScript:
               scene_type="quote", text="Değişime ayak uyduramadı", highlight=["Değişime"], mood="fall"),
         Scene(narration="Sonunda şirket, zirvedeki değerinin çok küçük bir kısmına, yalnızca 7 milyar dolara satıldı.",
               scene_type="big_number", value="7", unit="MİLYAR $", label="Satış fiyatı", brand=c, mood="fall"),
+        Scene(narration="Bugün bu hikâye, iş okullarında ders olarak anlatılıyor.",
+              scene_type="quote", text="İş okullarında ders olarak anlatılıyor", highlight=["ders"]),
         Scene(narration="Asıl ders ise hâlâ çoğu şirketin gözünden kaçıyor.",
               scene_type="quote", text="Asıl ders hâlâ gözden kaçıyor", highlight=["ders"]),
     ]
@@ -103,7 +107,7 @@ def _silent_audio_with_timings(text: str, video_dir: Path) -> None:
     from src import subtitles
 
     duration = max(len(text.split()) * 0.42, 3.0)
-    subprocess.run(
+    proc.run(
         ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
          "-t", f"{duration:.2f}", "-q:a", "9", str(video_dir / "audio.mp3")],
         check=True,

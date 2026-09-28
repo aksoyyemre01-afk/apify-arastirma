@@ -5,14 +5,22 @@ Telifsiz, dışarıdan dosya gerektirmeyen, kısa ve temiz efektler (RULES.md ku
   sonra parlak (yüksek bant) duyulur ve soldan sağa geçer - sahne geçişi hissi.
 - impact.mp3 (~1,3 sn): 110 Hz'den 42 Hz'e hızla inen alçak "boom", kısa bir vuruş
   geçişi (transient) ve hafif oda yankısı - reveal/düşüş anı için.
-İkisi de 48 kHz stereo, tepe -1 dBFS'ye normalize edilir; videodaki seviye
-config/brand.json -> audio.sfx_volume_db ile ayarlanır.
+İkisi de 48 kHz stereo, tepe -1 dBFS'ye normalize edilir; videodaki seviye seslendirmeye
+göre ölçülerek ayarlanır (config/brand.json -> audio.whoosh_below_voice_db / impact_below_voice_db).
 
 Kullanım:  python tools/make_sfx.py            (var olan dosyaların üzerine yazar)
 """
 
+import os
 import subprocess
 from pathlib import Path
+
+# Windows'ta ffmpeg için konsol penceresi açılmasın (bkz. src/proc.py).
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+
+
+def _quiet(args, **kwargs):
+    return subprocess.run(args, creationflags=_NO_WINDOW, **kwargs)
 
 OUT = Path(__file__).resolve().parent.parent / "assets" / "audio"
 RATE = 48000
@@ -21,18 +29,18 @@ RATE = 48000
 def _run(filter_complex: str, duration: float, dest: Path) -> None:
     # Önce ara WAV (tepe ölçümü için), sonra -1 dBFS tepeye normalize edilmiş MP3.
     wav = dest.with_suffix(".tmp.wav")
-    subprocess.run(
+    _quiet(
         ["ffmpeg", "-v", "error", "-y", "-filter_complex", filter_complex, "-map", "[out]",
          "-t", f"{duration}", "-ar", str(RATE), "-ac", "2", str(wav)],
         check=True,
     )
-    probe = subprocess.run(
+    probe = _quiet(
         ["ffmpeg", "-hide_banner", "-i", str(wav), "-af", "volumedetect", "-f", "null", "-"],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     peak = float(probe.stderr.split("max_volume:")[1].split("dB")[0])
     gain = -1.0 - peak
-    subprocess.run(
+    _quiet(
         ["ffmpeg", "-v", "error", "-y", "-i", str(wav), "-af", f"volume={gain:.2f}dB",
          "-c:a", "libmp3lame", "-b:a", "192k", str(dest)],
         check=True,

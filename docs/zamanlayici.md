@@ -1,0 +1,102 @@
+# Haftalık otomatik tetikleme — Windows Görev Zamanlayıcı
+
+Görev her hafta (öneri: pazartesi 08:00) `pipeline.py --week` komutunu **konsolsuz**
+`pythonw.exe` ile çalıştırır: haftanın konusu seçilir, 3 bölüme ayrılır ve
+`runs\<yıl>-W<hafta>\review.md` hazırlanır; ardından bir Windows bildirimi gelir. Hiçbir
+pencere açılmaz: çıktı `runs\pipeline-konsol.log` dosyasına yazılır, arka plan üretimi ve
+tüm ffmpeg/Node çağrıları gizli çalışır.
+**Üretim sizin onayınızla başlar**; zamanlayıcı yalnızca ilk adımı yapar.
+
+```
+pazartesi 08:00  zamanlayıcı -> pipeline.py --week -> review.md + bildirim ("Haftanın konusu hazır")
+siz              python pipeline.py --approve        -> 3 short arka planda üretilir (~15-25 dk)
+                                                     -> review.md + bildirim ("Haftanın videoları hazır")
+siz              python pipeline.py --approve        -> videolar yayina-hazir\<hafta>\ klasörüne
+```
+
+## Ön koşullar (bir kez)
+
+1. `.env` dosyasında `GEMINI_API_KEY` ve `ELEVENLABS_API_KEY` dolu olmalı.
+2. Elle bir kez deneyin (repo klasöründe, PowerShell):
+   ```powershell
+   .\.venv\Scripts\python.exe pipeline.py --week
+   ```
+   `runs\...\review.md` oluşuyor ve bildirim geliyorsa hazırsınız. Denemeyi istemiyorsanız
+   `runs\` altındaki o haftanın klasörünü silebilirsiniz.
+
+## Kurulum — yöntem 1: PowerShell (önerilen, tek komut)
+
+PowerShell'i **normal kullanıcı olarak** açın (yönetici gerekmez) ve yolu kendi repo
+klasörünüze göre düzenleyip çalıştırın:
+
+```powershell
+$repo = "C:\Users\Emre.Aksoy\apify-arastirma"
+$action  = New-ScheduledTaskAction -Execute "$repo\.venv\Scripts\pythonw.exe" -Argument "pipeline.py --week" -WorkingDirectory $repo
+$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At 08:00
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 1) `
+            -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+Register-ScheduledTask -TaskName "ShortPipeline-Haftalik" -Action $action -Trigger $trigger -Settings $settings `
+            -Description "Haftalık short konusu ve plan (pipeline.py --week)"
+```
+
+- `-StartWhenAvailable`: bilgisayar pazartesi 08:00'de kapalıysa, açıldığında görev
+  hemen çalışır.
+- Görev yalnızca siz oturum açmışken çalışır. Bu bilerek böyle: bildirimin görünmesi
+  ve `.env`/`PATH` ayarlarınızın (ffmpeg, Node) geçerli olması için gerekli.
+
+## Kurulum — yöntem 2: Görev Zamanlayıcı arayüzü
+
+1. Başlat menüsünde **Görev Zamanlayıcı**'yı açın → sağda **Görev Oluştur...** (Temel Görev değil).
+2. **Genel** sekmesi:
+   - Ad: `ShortPipeline-Haftalik`
+   - "Yalnızca kullanıcı oturum açtığında çalıştır" seçili kalsın.
+   - "En yüksek ayrıcalıklarla çalıştır" işaretlemeyin.
+3. **Tetikleyiciler** → **Yeni...** → "Zamanlamaya göre", **Haftalık**, başlangıç saati
+   `08:00`, **Pazartesi** işaretli → Tamam.
+4. **Eylemler** → **Yeni...** → "Program başlat":
+   - Program/komut dosyası: `C:\Users\Emre.Aksoy\apify-arastirma\.venv\Scripts\pythonw.exe`
+   - Bağımsız değişkenler: `pipeline.py --week`
+   - Başlama yeri: `C:\Users\Emre.Aksoy\apify-arastirma`
+   (`pythonw.exe` konsolsuzdur; `python.exe` yazarsanız her pazartesi bir pencere açılır.)
+5. **Koşullar**: "Bilgisayar AC güçteyse başlat" işaretini kaldırın (dizüstünde pilde de çalışsın).
+6. **Ayarlar**:
+   - "Zamanlanmış başlatma kaçırılırsa görevi en kısa sürede çalıştır" işaretleyin.
+   - "Görev şundan uzun sürerse durdur: 1 saat".
+7. **Tamam**.
+
+## Kurulum — yöntem 3: schtasks (tek satır)
+
+```bat
+schtasks /Create /TN "ShortPipeline-Haftalik" /TR "\"C:\Users\Emre.Aksoy\apify-arastirma\.venv\Scripts\pythonw.exe\" \"C:\Users\Emre.Aksoy\apify-arastirma\pipeline.py\" --week" /SC WEEKLY /D MON /ST 08:00 /F
+```
+
+Bu yöntemde "kaçırılırsa çalıştır" seçeneği ve çalışma klasörü ayarı yoktur (pipeline kendi
+klasörünü bulur); "kaçırılırsa çalıştır" için arayüzden 6. adımı yapın.
+
+## Test ve kontrol
+
+```powershell
+Start-ScheduledTask -TaskName "ShortPipeline-Haftalik"      # şimdi çalıştır
+Get-ScheduledTaskInfo -TaskName "ShortPipeline-Haftalik"      # son çalışma zamanı ve sonucu (0 = başarılı)
+Get-Content runs\pipeline-konsol.log -Tail 30                 # görevin çıktısı (pythonw)
+.\.venv\Scripts\python.exe pipeline.py --status               # haftanın durumu ve maliyeti
+```
+
+Aynı hafta için ikinci bir çalıştırma başlatılmaz; görev yanlışlıkla iki kez çalışırsa ikincisi
+"zaten var" diyerek çıkar.
+
+## Kaldırma / durdurma
+
+```powershell
+Disable-ScheduledTask    -TaskName "ShortPipeline-Haftalik"   # geçici olarak durdur
+Unregister-ScheduledTask -TaskName "ShortPipeline-Haftalik" -Confirm:$false   # tamamen kaldır
+```
+
+## Sorun giderme
+
+| Belirti | Neden / çözüm |
+|---|---|
+| Görev "0x1" ile bitti | `runs\pipeline-konsol.log`'a bakın. Çoğunlukla `.env` anahtarı eksiktir. |
+| Bildirim gelmedi | Görev siz oturum açmamışken çalışmış olabilir; `review.md` yine oluşur. `--status` ile kontrol edin. |
+| Üretim yarıda kaldı (bilgisayar kapandı) | `python pipeline.py --status` "DURMUŞ" der; `python pipeline.py --approve` kaldığı yerden devam ettirir. |
+| "bütçe sınırı" bildirimi | Tahmini haftalık maliyet `config\pipeline.json` → `budget_usd_per_week` değerini aştı. `--approve` bir hafta sınırı kadar ek bütçe verip devam ettirir. |

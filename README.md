@@ -90,6 +90,48 @@ python build_video.py --dir ... --frames 2    # kalite kontrolü: 2 sn'de bir ka
 Remotion Studio ile canlı önizleme: `cd remotion && npx remotion studio`
 (`--props=<klasör>/assets/props.json --public-dir=<klasör>/assets/public`).
 
+## Haftalık multi-agent pipeline (`pipeline.py`)
+
+Sürekli geri bildirim gerektirmeden haftanın 3 short'unu üretir. Yalnızca iki onay
+noktası vardır; ikisi de tek bir dosyadan (`runs/<yıl>-W<hafta>/review.md`) ve tek
+komutla verilir.
+
+```
+python pipeline.py --week          # Araştırmacı: konu + 3 bölüm planı -> review.md  (ONAY 1)
+python pipeline.py --approve       # üretim arka planda başlar, bitince bildirim
+                                   # -> review.md: script'ler, doğrulama kaynakları, QA puanları, videolar (ONAY 2)
+python pipeline.py --approve       # videolar yayina-hazir/<hafta>/ klasörüne, konu "kullanıldı"
+python pipeline.py --reject "gerekçe" [--short 2]   # onay 1: yeni konu / onay 2: düzelttir
+python pipeline.py --status        # durum + kullanım ve tahmini maliyet
+```
+
+| Agent | Ne yapar |
+|---|---|
+| Araştırmacı (`agents/researcher.py`) | Konuyu seçer; tek istekle Pzt/Çar/Cum bölümlerine ayırır (olaylar bölümler arasında tekrar etmez); uzun video taslağı (2. aşama). |
+| Senarist (`agents/scriptwriter.py`) | Mevcut script üretimi + süre/hook kontrolleri; geri bildirimle revizyon (önce/sonra farkı log'a). |
+| Doğrulayıcı (`agents/verifier.py`) | Rakam, tarih ve iddiaları Gemini + Google Search grounding ile kontrol eder; yanlışı düzelttirir, doğrulanamayanı çıkarttırır, kaynakları kaydeder. |
+| Yönetmen (`agents/director.py`) | Mevcut ses + render; ses yalnızca metin değiştiyse yeniden üretilir; contact sheet'ler. |
+| Eleştirmen (`agents/critic.py`) | Kodla ölçülenler (süre, marka zamanı, sahne süresi, LUFS, format) + Gemini görsel modeliyle RULES.md puanlaması; geçmezse ilgili agent'a geri (en fazla 3 tur), hâlâ geçmezse durur ve rapor yazar. |
+
+- Her agent'ın kararları ve revizyon geçmişi: `runs/<hafta>/log.md`.
+- Kullanım ve tahmini maliyet her komutun sonunda ve review.md'de; fiyatlar `config/pricing.json`.
+- Ayarlar (bütçe sınırı, QA eşiği, tur sayısı, modeller): `config/pipeline.json`.
+- Haftalık otomatik tetikleme: [docs/zamanlayici.md](docs/zamanlayici.md). Pipeline tamamen
+  sessiz çalışır: arka plan işçisi gizli konsolda başlar, tüm ffmpeg/Node/PowerShell çağrıları
+  `src/proc.py` üzerinden `CREATE_NO_WINDOW` ile yapılır, zamanlayıcı `pythonw.exe` kullanır.
+
+### Eleştirmen kalibrasyon testi
+
+```
+python tests/test_critic_calibration.py          # ~5 dk (2 render) + 2 görsel Gemini isteği (~0,07 $)
+python tests/test_critic_calibration.py --reuse  # videolar varsa yalnızca puanlama
+```
+
+Aynı dry-run script'inden temiz ve kasıtlı bozulmuş (alakasız logo, seslendirmeyle çelişen
+rakam, 5 sn'yi aşan sahne, yapışık altyazı) iki video üretir. Eleştirmen temizi geçirmeli, her
+hatayı doğru kural ve sahneyle yakalamalı, her videoda en az 2 iyileştirme önerisi yazmalıdır.
+Eleştirmen'in istemi veya modeli değiştiğinde çalıştırın. Rapor: `tests/_calibration/report.json`.
+
 ## GitHub Actions ile haftalık otomasyon
 
 `.github/workflows/weekly-content.yml`, her **Pazartesi 06:00 UTC**'de

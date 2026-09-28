@@ -256,12 +256,20 @@ RETRY_ON_STATUS = 503
 RETRY_DELAYS_SECONDS = (5, 15, 45)
 
 
-def _generate(contents: str, schema: type):
-    config = types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema)
+# Kullanım/maliyet takibi için isteğe bağlı kanca: fn(response, amaç). agents/ katmanı
+# (pipeline.py) atar; atanmamışsa hiçbir şey yapılmaz.
+USAGE_HOOK = None
+
+
+def generate_raw(contents, config: types.GenerateContentConfig, purpose: str, model: str | None = None):
+    """Tek Gemini isteği; yalnızca 503'te artan beklemeyle 3 kez daha dener (429 ve diğer
+    hatalar asla tekrar denenmez). Yanıt nesnesini döner; kullanım kancaya bildirilir."""
     for attempt in range(len(RETRY_DELAYS_SECONDS) + 1):
         try:
-            response = _get_client().models.generate_content(model=MODEL, contents=contents, config=config)
-            return schema.model_validate_json(response.text)
+            response = _get_client().models.generate_content(model=model or MODEL, contents=contents, config=config)
+            if USAGE_HOOK:
+                USAGE_HOOK(response, purpose)
+            return response
         except genai_errors.APIError as e:
             if e.code != RETRY_ON_STATUS or attempt == len(RETRY_DELAYS_SECONDS):
                 raise
@@ -269,6 +277,12 @@ def _generate(contents: str, schema: type):
             print(f"   Gemini {e.code} (sunucu yoğun); {delay} sn sonra tekrar denenecek "
                   f"({attempt + 1}/{len(RETRY_DELAYS_SECONDS)})...")
             time.sleep(delay)
+
+
+def _generate(contents: str, schema: type):
+    config = types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema)
+    response = generate_raw(contents, config, purpose=schema.__name__)
+    return schema.model_validate_json(response.text)
 
 
 def write_short_script(topic: dict, focus_block: str = "") -> ShortScript:

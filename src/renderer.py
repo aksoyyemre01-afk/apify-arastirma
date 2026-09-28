@@ -8,6 +8,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from . import proc
 from . import brand_config, scene_planner, subtitles
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -30,7 +31,7 @@ def _find_node() -> str:
 
 
 def probe_duration(path: Path) -> float:
-    result = subprocess.run(
+    result = proc.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
         capture_output=True, text=True,
     )
@@ -47,7 +48,7 @@ def _load_timings(video_dir: Path, narration: str, duration: float) -> list[dict
     return subtitles.estimate_word_timings(narration, duration)
 
 
-def render(video_dir: Path, part_info: dict | None = None, offline_logos: bool = False) -> Path:
+def render(video_dir: Path, part_info: dict | None = None, offline_logos: bool = False, mutate=None) -> Path:
     video_dir = Path(video_dir)
     script = json.loads((video_dir / "script.json").read_text(encoding="utf-8"))
     audio = video_dir / "audio.mp3"
@@ -63,6 +64,9 @@ def render(video_dir: Path, part_info: dict | None = None, offline_logos: bool =
 
     cfg = brand_config.load()
     props, files = scene_planner.build_props(script, timings, audio, duration, cfg, part_info, offline_logos)
+    if mutate:
+        # Yalnızca test amaçlı: planlanmış sahnelere kasıtlı müdahale (Eleştirmen kalibrasyonu).
+        mutate(props, files)
 
     work = video_dir / "assets"
     public_dir = work / "public"
@@ -80,7 +84,7 @@ def render(video_dir: Path, part_info: dict | None = None, offline_logos: bool =
         "--log=warn",
     ]
     print(f"      Remotion render başlıyor ({props['durationInFrames']} kare)...")
-    result = subprocess.run(cmd, cwd=REMOTION_DIR, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    result = proc.run(cmd, cwd=REMOTION_DIR, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if result.returncode != 0 or not out.exists():
         raise RenderError(f"Remotion render başarısız:\n{result.stdout[-3000:]}\n{result.stderr[-3000:]}")
     add_music(out, audio, cfg.get("audio", {}))
@@ -127,7 +131,7 @@ def add_music(video: Path, narration: Path, audio_cfg: dict) -> None:
     duration = probe_duration(video)
     tmp = video.with_name(video.stem + ".music.mp4")
     fc = music_duck_filter(gain_db, duration, "0:a", "1:a", "aout")
-    result = subprocess.run(
+    result = proc.run(
         ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-stream_loop", "-1", "-i", str(MUSIC_FILE),
          "-filter_complex", fc, "-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "256k",
          "-t", f"{duration:.3f}", str(tmp)],
@@ -171,14 +175,14 @@ AUDIO_ENCODE_ARGS = ["-c:a", "aac", "-profile:a", "aac_low", "-b:a", "192k", "-a
 
 def _video_filter() -> str:
     """zscale (libzimg) varsa onu, yoksa swscale'i kullanır."""
-    filters = subprocess.run(["ffmpeg", "-hide_banner", "-filters"], capture_output=True, text=True).stdout
+    filters = proc.run(["ffmpeg", "-hide_banner", "-filters"], capture_output=True, text=True).stdout
     return _ZSCALE_FILTER if " zscale " in filters else _SCALE_FILTER
 
 
 def _loudnorm_filter(video: Path) -> str | None:
     """İki geçişli loudnorm'un ikinci geçiş filtresi; ses sessizse (ör. dry-run) None."""
     base = f"loudnorm=I={TARGET_LUFS}:TP={TARGET_TRUE_PEAK}:LRA={TARGET_LRA}"
-    probe = subprocess.run(
+    probe = proc.run(
         ["ffmpeg", "-hide_banner", "-i", str(video), "-map", "0:a", "-af", f"{base}:print_format=json", "-f", "null", "-"],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
@@ -205,7 +209,7 @@ def normalize_loudness(video: Path) -> None:
     loudnorm = _loudnorm_filter(video)
     audio_filter = f"{loudnorm + ',' if loudnorm else ''}aresample=48000,aformat=channel_layouts=stereo"
     tmp = video.with_name(video.stem + ".final.mp4")
-    result = subprocess.run(
+    result = proc.run(
         ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-map", "0:v:0", "-map", "0:a:0",
          "-vf", _video_filter(), *VIDEO_ENCODE_ARGS,
          "-af", audio_filter, *AUDIO_ENCODE_ARGS,
@@ -221,7 +225,7 @@ def normalize_loudness(video: Path) -> None:
 
 def extract_audio(video: Path, dest: Path) -> Path:
     """Videonun ses kanalını ayrıca dinlemek için MP3 olarak çıkarır (48 kHz stereo, 192 kb/s)."""
-    subprocess.run(
+    proc.run(
         ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-vn", "-map", "0:a:0",
          "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "48000", "-ac", "2", str(dest)],
         check=True,
@@ -234,7 +238,7 @@ def extract_frames(video: Path, dest_dir: Path, every_seconds: float = 2.0) -> l
     if dest_dir.exists():
         shutil.rmtree(dest_dir)
     dest_dir.mkdir(parents=True)
-    subprocess.run(
+    proc.run(
         ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-vf", f"fps=1/{every_seconds}",
          str(dest_dir / "kare_%02d.png")],
         check=True,

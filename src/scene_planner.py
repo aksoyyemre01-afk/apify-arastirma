@@ -25,6 +25,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from . import proc
 from . import logos
 from .schemas import Scene
 from .utils import slugify
@@ -326,20 +327,60 @@ def _split_long(segs: list[dict], timings: list[dict], main_brand: str) -> list[
         # Tek aday bile bir sonraki sahneyle aynı tipteyse (ör. alıntının tek alternatifi logo
         # kartı ve ardından zaten logo kartı geliyor) ikinci parça aynı sahnenin yakın planıdır.
         camera_cut_only = all(a["scene_type"] == next_type for a in alts)
+        # Kural 1: rakam/yıl kartı, o rakamın SÖYLENDİĞİ parçada görünmeli. Rakam cümlenin
+        # sonunda söyleniyorsa orijinal (rakam) kartı sona, alternatif kart başa alınır ve
+        # alternatif kart rakamı erkenden etiket olarak da göstermez.
+        spoken_at = _value_spoken_at(seg, timings)
+        orig_parity = 0
+        if spoken_at is not None and not camera_cut_only:
+            orig_parity = min(int((spoken_at - seg["start"]) / step), n - 1) % 2
         for k in range(n):
             start, end = seg["start"] + k * step, seg["start"] + (k + 1) * step
             part = dict(seg, start=start, end=end)
-            if k % 2 == 0 or camera_cut_only:
+            choice = None
+            if not (k % 2 == orig_parity or camera_cut_only):
+                choice = _pick_alternate(alts, out, next_type, k)
+            if choice is None:
                 # Orijinal sahne; tekrar ediyorsa yakın plan varyantıyla.
                 part["variant"] = seg.get("variant", 0) + (k if camera_cut_only else k // 2)
             else:
-                alt = dict(seg["scene"], **alts[(k // 2) % len(alts)], reveal=False)
+                alt = dict(seg["scene"], **choice, reveal=False)
                 if alt["scene_type"] == "quote" and not alt.get("text"):
                     alt["text"] = _sentence_tail(seg["scene"]["narration"])
                     alt["highlight"] = _pick_highlight(alt["text"])
+                if orig_parity == 1 and k < n - 1 and alt["scene_type"] == "logo_intro":
+                    alt["label"] = ""  # rakam henüz söylenmedi
                 part.update(scene=alt, variant=0)
             out.append(part)
     return out
+
+
+def _pick_alternate(alts: list[dict], out: list[dict], next_type: str, k: int) -> dict | None:
+    """Bölünmüş sahnenin ikinci parçası için aday seçer. Aynı kart tipi art arda ya da çok sık
+    gelmesin: son iki kartta logo kartı varsa (ya da sıradaki sahne logo kartıysa) logo kartı
+    seçilmez - kalibrasyonda Eleştirmen "logo kartları sık tekrarlanıyor" diye puan kırıyordu.
+    Uygun aday yoksa None (aynı sahnenin yakın plan kesmesi kullanılır)."""
+    recent = {p["scene"]["scene_type"] for p in out[-2:]}
+    last = out[-1]["scene"]["scene_type"] if out else ""
+    ok = [a for a in alts if a["scene_type"] != next_type and a["scene_type"] != last
+          and not (a["scene_type"] == "logo_intro" and ("logo_intro" in recent or next_type == "logo_intro"))]
+    if not ok:
+        return None
+    return ok[(k // 2) % len(ok)]
+
+
+def _value_spoken_at(seg: dict, timings: list[dict]) -> float | None:
+    """Sahnenin ekranda gösterdiği rakamın (value/year/end_value) seslendirmede söylendiği an."""
+    sc = seg["scene"]
+    key = set()
+    for field in ("value", "year", "end_value"):
+        key |= _numbers(sc.get(field, ""))
+    if not key:
+        return None
+    for w in timings:
+        if seg["start"] - 0.1 <= w["start"] < seg["end"] and _numbers(w["word"]) & key:
+            return w["start"]
+    return None
 
 
 def _sentence_tail(narration: str, max_words: int = 9) -> str:
@@ -595,7 +636,7 @@ def _outro(cfg: dict, script: dict, part_info: dict | None, start_frame: int) ->
 
 def measure_lufs(path: Path) -> float | None:
     """Dosyanın bütünleşik ses yüksekliği (EBU R128, LUFS)."""
-    result = subprocess.run(
+    result = proc.run(
         ["ffmpeg", "-hide_banner", "-i", str(path), "-map", "0:a", "-af", "ebur128", "-f", "null", "-"],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
@@ -607,7 +648,7 @@ def measure_lufs(path: Path) -> float | None:
 
 def measure_rms(path: Path) -> float | None:
     """Dosyanın ortalama RMS seviyesi (dBFS)."""
-    result = subprocess.run(
+    result = proc.run(
         ["ffmpeg", "-hide_banner", "-i", str(path), "-map", "0:a", "-af", "volumedetect", "-f", "null", "-"],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )

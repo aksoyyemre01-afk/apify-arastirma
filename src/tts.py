@@ -22,6 +22,16 @@ def _get_client() -> ElevenLabs:
     return _client
 
 
+# Kullanım/maliyet takibi için isteğe bağlı kanca: fn(karakter_sayısı, model_id).
+# agents/ katmanı (pipeline.py) atar; atanmamışsa hiçbir şey yapılmaz.
+USAGE_HOOK = None
+
+
+def _report_usage(text: str, model_id: str) -> None:
+    if USAGE_HOOK:
+        USAGE_HOOK(len(text), model_id)
+
+
 def synthesize(text: str, output_path: str) -> None:
     client = _get_client()
     voice_id = os.environ.get("ELEVENLABS_VOICE_ID") or DEFAULT_VOICE_ID
@@ -37,6 +47,7 @@ def synthesize(text: str, output_path: str) -> None:
         for chunk in audio:
             if chunk:
                 f.write(chunk)
+    _report_usage(text, model_id)
 
 
 def _characters_to_words(characters: list[str], starts: list[float], ends: list[float]) -> list[dict]:
@@ -84,6 +95,7 @@ def synthesize_with_timestamps(text: str, output_path: str) -> list[dict] | None
         audio_bytes = base64.b64decode(result.audio_base_64)
         with open(output_path, "wb") as f:
             f.write(audio_bytes)
+        _report_usage(text, model_id)
 
         alignment = result.alignment
         return _characters_to_words(

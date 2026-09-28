@@ -12,3 +12,7 @@ assets/logos/_not_found.json
 # Sentezlenmiş efektler repoda (tools/make_sfx.py ile yeniden üretilebilir); müzik lisanslı olduğu için dışarıda.
 !assets/audio/whoosh.mp3
 !assets/audio/impact.mp3
+# Pipeline çalıştırmaları ve yayına hazır videolar (makineye özgü üretim çıktıları)
+runs/
+yayina-hazir/
+tests/_calibration/

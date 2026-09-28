@@ -1,0 +1,19 @@
+{
+  "_aciklama": "Multi-agent pipeline ayarları (pipeline.py). Konuya/kanala özgü hiçbir şey içermez.",
+  "budget_usd_per_week": 2.0,
+  "qa": {
+    "max_rounds": 3,
+    "min_rule_score": 3,
+    "min_average_score": 4.0,
+    "frames_per_sheet": 8
+  },
+  "verify": {
+    "max_rounds": 2
+  },
+  "models": {
+    "text": "",
+    "vision": "",
+    "search": ""
+  },
+  "publish_dir": "yayina-hazir"
+}

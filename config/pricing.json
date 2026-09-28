@@ -1,0 +1,18 @@
+{
+  "_aciklama": "Tahmini maliyet hesabı için birim fiyatlar (USD). Fatura yerine geçmez; fiyatlar değişirse yalnızca bu dosya güncellenir.",
+  "_kaynak": {
+    "gemini": "https://ai.google.dev/gemini-api/docs/pricing (2026-09-28'de okundu)",
+    "elevenlabs": "https://elevenlabs.io/pricing/api (2026-09-28'de okundu)"
+  },
+  "gemini": {
+    "_not": "gemini-3.6-flash ücretli katman. 1 Ocak 2027'den itibaren girdi 1.50, çıktı 7.50 $ / 1M token olacak.",
+    "input_per_million": 0.75,
+    "output_per_million": 3.75,
+    "search_free_per_month": 5000,
+    "search_per_thousand": 14.0
+  },
+  "elevenlabs": {
+    "_not": "Multilingual v2. Abonelik kredisi içinde kalırsa ek fatura çıkmaz; bu rakam kredi tüketiminin dolar karşılığıdır.",
+    "per_thousand_chars": 0.08
+  }
+}
