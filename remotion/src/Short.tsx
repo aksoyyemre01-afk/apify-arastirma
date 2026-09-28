@@ -270,7 +270,7 @@ const Inner: React.FC<ShortProps> = (props) => {
       ) : null}
       {props.audio.sfx.map((x, i) => (
         <Sequence key={`s${i}`} from={x.from} layout="none">
-          <Audio src={staticFile(x.src)} volume={props.audio.sfxVolume} />
+          <Audio src={staticFile(x.src)} volume={Math.min((x.volume ?? 1) * props.audio.sfxVolume, 1)} />
         </Sequence>
       ))}
     </AbsoluteFill>

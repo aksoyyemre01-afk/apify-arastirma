@@ -22,6 +22,7 @@ import difflib
 import math
 import re
 import shutil
+import subprocess
 from pathlib import Path
 
 from . import logos
@@ -592,6 +593,40 @@ def _outro(cfg: dict, script: dict, part_info: dict | None, start_frame: int) ->
     }
 
 
+def measure_lufs(path: Path) -> float | None:
+    """Dosyanın bütünleşik ses yüksekliği (EBU R128, LUFS)."""
+    result = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-i", str(path), "-map", "0:a", "-af", "ebur128", "-f", "null", "-"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    m = re.findall(r"I:\s+(-?[\d.]+|-inf)\s+LUFS", result.stderr)
+    if not m or m[-1] == "-inf":
+        return None
+    return float(m[-1])
+
+
+def measure_rms(path: Path) -> float | None:
+    """Dosyanın ortalama RMS seviyesi (dBFS)."""
+    result = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-i", str(path), "-map", "0:a", "-af", "volumedetect", "-f", "null", "-"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    m = re.search(r"mean_volume:\s*(-?[\d.]+)\s*dB", result.stderr)
+    return float(m.group(1)) if m else None
+
+
+def _sfx_gain(voice: Path, effect: Path, below_db: float) -> float:
+    """Kural 8: efekt, çaldığı süre boyunca seslendirmenin `below_db` altında kalır.
+    Sabit bir kazanç efekt dosyasının kendi seviyesine bağlı kalırdı (ölçümde whoosh'lar
+    konuşmadan 1-4 dB, impact 6 dB yüksek çıkmıştı); bu yüzden ikisi de ölçülür."""
+    v, e = measure_rms(voice), measure_rms(effect)
+    if v is None or e is None:
+        return 10 ** (-18 / 20)
+    gain_db = min((v - below_db) - e, 0.0)  # Remotion ses kazancı en fazla 1 (0 dB)
+    print(f"      Efekt {effect.stem}: {e:.1f} dB, ses {v:.1f} dB -> kazanç {gain_db:+.1f} dB (sesin {below_db:g} dB altı)")
+    return 10 ** (gain_db / 20)
+
+
 def build_props(
     script: dict,
     timings: list[dict],
@@ -634,29 +669,34 @@ def build_props(
 
     scene_props = [_scene_props(seg, reg, mystery, reveal_t) for seg in segs]
 
-    # Kural 8: ses efektleri (dosya varsa).
+    # Kural 8: ses efektleri (dosya varsa). Her efektin kazancı, seslendirmenin ölçülen
+    # seviyesine göre ayarlanır (bkz. _sfx_gain) - efekt asla konuşmayı bastırmaz.
+    # Müzik Remotion'a verilmez: render'dan sonra konuşmaya göre kısılarak (ducking)
+    # src/renderer.py'de eklenir.
+    audio_cfg = cfg.get("audio", {})
     sfx = []
     whoosh = AUDIO_ASSETS_DIR / "whoosh.mp3"
     impact = AUDIO_ASSETS_DIR / "impact.mp3"
     files: dict[str, Path] = {"audio/narration" + audio_path.suffix: audio_path}
-    if whoosh.exists():
-        files["audio/whoosh.mp3"] = whoosh
-        last = -99.0
-        for seg, sp in zip(segs, scene_props):
-            if seg["start"] > 0.2 and sp["variant"] == 0 and seg["start"] - last >= WHOOSH_MIN_GAP:
-                if reveal_t is not None and abs(seg["start"] - reveal_t) < 0.5:
-                    continue
-                sfx.append({"src": "audio/whoosh.mp3", "from": _frame(seg["start"])})
-                last = seg["start"]
+    hits: list[float] = []
     if impact.exists():
         files["audio/impact.mp3"] = impact
         hits = [reveal_t] if reveal_t is not None else []
         hits += [seg["start"] for seg, sp in zip(segs, scene_props)
                  if sp["type"] == "chart" and sp.get("direction") == "down" and sp["variant"] == 0]
-        sfx += [{"src": "audio/impact.mp3", "from": _frame(t)} for t in hits]
-    music = AUDIO_ASSETS_DIR / "music.mp3"
-    if music.exists():
-        files["audio/music.mp3"] = music
+        vol = _sfx_gain(audio_path, impact, float(audio_cfg.get("impact_below_voice_db", 6)))
+        sfx += [{"src": "audio/impact.mp3", "from": _frame(t), "volume": vol} for t in hits]
+    if whoosh.exists():
+        files["audio/whoosh.mp3"] = whoosh
+        vol = _sfx_gain(audio_path, whoosh, float(audio_cfg.get("whoosh_below_voice_db", 12)))
+        last = -99.0
+        for seg, sp in zip(segs, scene_props):
+            if seg["start"] > 0.2 and sp["variant"] == 0 and seg["start"] - last >= WHOOSH_MIN_GAP:
+                # Impact ile aynı ana denk gelen whoosh üst üste binip sesi boğar; atlanır.
+                if any(abs(seg["start"] - h) < 0.6 for h in hits):
+                    continue
+                sfx.append({"src": "audio/whoosh.mp3", "from": _frame(seg["start"]), "volume": vol})
+                last = seg["start"]
 
     audio_frames = _frame(audio_duration) + 1
     outro = _outro(cfg, script, part_info, audio_frames)
@@ -667,7 +707,6 @@ def build_props(
         name = cfg["fonts"][key]
         files[f"fonts/{name}"] = FONT_DIR / name
 
-    audio_cfg = cfg.get("audio", {})
     props = {
         "fps": FPS,
         "width": WIDTH,
@@ -684,9 +723,9 @@ def build_props(
         "captions": _captions(timings, audio_duration),
         "audio": {
             "narration": "audio/narration" + audio_path.suffix,
-            "music": "audio/music.mp3" if music.exists() else None,
-            "musicVolume": 10 ** (float(audio_cfg.get("music_volume_db", -20)) / 20),
-            "sfxVolume": 10 ** (float(audio_cfg.get("sfx_volume_db", -6)) / 20),
+            "music": None,
+            "musicVolume": 0.0,
+            "sfxVolume": 1.0,
             "sfx": sfx,
         },
         "outro": outro,

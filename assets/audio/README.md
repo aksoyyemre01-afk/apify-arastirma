@@ -1,14 +1,28 @@
 # assets/audio/ — müzik ve ses efektleri (RULES.md kural 8)
 
-Video render'ı (`src/scene_planner.py` → Remotion) burada aşağıdaki dosyaları
-**varsa** otomatik kullanır (isim birebir eşleşmeli). Dosya yoksa o katman
-sessizce atlanır — video yine normal üretilir.
+Render bu klasördeki dosyaları **varsa** otomatik kullanır (isimler birebir eşleşmeli).
+Dosya yoksa o katman sessizce atlanır; video yine normal üretilir.
 
-| Dosya | Ne zaman çalar | Öneri |
+| Dosya | Ne zaman çalar | Kaynak |
 |---|---|---|
-| `music.mp3` | Tüm video boyunca döngüde, `config/brand.json` → `audio.music_volume_db` seviyesinde (varsayılan -20 dB), sonda yumuşak kapanış | Telifsiz, gerilimli/ritmik bir parça |
-| `whoosh.mp3` | Sahne geçişlerinde (en az 1,5 sn arayla) | ~0.3-0.8 sn kısa whoosh |
-| `impact.mp3` | Gizemli hook'ta markanın açığa çıktığı an ve düşüş grafiklerinin başında | ~0.5-1.5 sn impact/hit |
+| `music.mp3` | Tüm video boyunca döngüde, sonda yumuşak kapanış | Sizin lisanslı müziğiniz (repoya girmez, `.gitignore`'da) |
+| `whoosh.mp3` | Sahne geçişlerinde (en az 1,5 sn arayla; impact ile çakışanlar atlanır) | `tools/make_sfx.py` ile sentezlenir (repoda) |
+| `impact.mp3` | Gizemli hook'ta markanın açığa çıktığı an ve düşüş grafiklerinin başında | `tools/make_sfx.py` ile sentezlenir (repoda) |
 
-Kaynak önerileri: [Pixabay Music](https://pixabay.com/music/), [Pixabay Sound Effects](https://pixabay.com/sound-effects/),
-YouTube Audio Library. `*.mp3` dosyaları .gitignore'dadır (repoya girmez).
+Efektleri yeniden üretmek için: `python tools/make_sfx.py`
+
+## Seviyeler (müzik ve efektler asla seslendirmeyi bastırmaz)
+
+Seviyeler sabit kazançla değil, seslendirmenin **ölçülen** seviyesine göre ayarlanır;
+böylece çok yüksek masterlanmış bir müzik ya da efekt dosyası da konuşmanın altında kalır.
+Ayarlar `config/brand.json` → `audio`:
+
+- `music_below_voice_db` (15): müziğin taban seviyesi, seslendirmenin kaç dB altında.
+  Ayrıca konuşma olan anlarda sidechain ducking müziği ek olarak kısar; duraklamalarda
+  ve outro'da taban seviyeye döner. Müzik render'dan sonra `src/renderer.py` içinde eklenir.
+- `whoosh_below_voice_db` (12) ve `impact_below_voice_db` (6): efektin, seslendirmenin kaç
+  dB altında olacağı (`src/scene_planner.py` `_sfx_gain`).
+
+Son olarak tüm mix -14 LUFS'a normalize edilir.
+
+Müzik kaynağı önerileri: [Pixabay Music](https://pixabay.com/music/), YouTube Audio Library.

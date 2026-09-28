@@ -83,8 +83,62 @@ def render(video_dir: Path, part_info: dict | None = None, offline_logos: bool =
     result = subprocess.run(cmd, cwd=REMOTION_DIR, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if result.returncode != 0 or not out.exists():
         raise RenderError(f"Remotion render başarısız:\n{result.stdout[-3000:]}\n{result.stderr[-3000:]}")
+    add_music(out, audio, cfg.get("audio", {}))
     normalize_loudness(out)
     return out
+
+
+# ---------------------------------------------------------------------------- müzik
+# Kural 8: müzik seslendirmeyi asla bastırmaz. İki katman:
+# 1) Taban seviye: müzik, dosyası ne kadar yüksek masterlanmış olursa olsun, ölçülen
+#    seslendirme seviyesinin `music_below_voice_db` altına oturtulur (sabit kazanç,
+#    yüksek bir parçayı konuşmanın ancak birkaç dB altında bırakıyordu).
+# 2) Ducking: konuşma (ve efekt) olduğu anlarda sidechain kompresör müziği ayrıca kısar;
+#    böylece cümle sonları ve sessiz heceler de müziğin altında kalmaz. Duraklamalarda ve
+#    outro'da müzik taban seviyesine geri döner.
+MUSIC_FILE = ROOT / "assets" / "audio" / "music.mp3"
+
+
+def music_duck_filter(gain_db: float, duration: float, mix: str, music: str, out: str) -> str:
+    """ffmpeg filter_complex parçası: `music` girişini kazanç + fade uygulayıp `mix`
+    (seslendirme + efekt) ile ducking yaparak karıştırır, sonucu `out` etiketine yazar.
+    Ölçüm betiği de aynı filtreyi kullanır."""
+    fade_out = max(duration - 1.2, 0)
+    return (
+        f"[{music}]aresample=48000,aformat=channel_layouts=stereo,volume={gain_db:.2f}dB,"
+        f"afade=t=in:d=0.4,afade=t=out:st={fade_out:.2f}:d=1.2,atrim=0:{duration:.3f}[m];"
+        f"[{mix}]aresample=48000,aformat=channel_layouts=stereo,asplit=2[dry][key];"
+        # Anahtar sinyal -40 dBFS'yi geçince 1:8 kısma; hızlı atak, konuşma arasında
+        # pompalamasın diye yavaş bırakma.
+        f"[m][key]sidechaincompress=threshold=0.01:ratio=8:attack=15:release=450:knee=3[duck];"
+        f"[dry][duck]amix=inputs=2:normalize=0:duration=first[{out}]"
+    )
+
+
+def add_music(video: Path, narration: Path, audio_cfg: dict) -> None:
+    if not MUSIC_FILE.exists():
+        return
+    below = float(audio_cfg.get("music_below_voice_db", 15))
+    voice_lufs, music_lufs = scene_planner.measure_lufs(narration), scene_planner.measure_lufs(MUSIC_FILE)
+    if voice_lufs is None or music_lufs is None:
+        print("      UYARI: müzik/ses yüksekliği ölçülemedi; müzik eklenmedi.")
+        return
+    gain_db = min((voice_lufs - below) - music_lufs, 0.0)
+    duration = probe_duration(video)
+    tmp = video.with_name(video.stem + ".music.mp4")
+    fc = music_duck_filter(gain_db, duration, "0:a", "1:a", "aout")
+    result = subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-stream_loop", "-1", "-i", str(MUSIC_FILE),
+         "-filter_complex", fc, "-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "256k",
+         "-t", f"{duration:.3f}", str(tmp)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    if result.returncode != 0:
+        tmp.unlink(missing_ok=True)
+        raise RenderError(f"müzik eklenemedi:\n{result.stderr[-1500:]}")
+    tmp.replace(video)
+    print(f"      Müzik: {music_lufs:.1f} LUFS, ses {voice_lufs:.1f} LUFS -> taban kazanç {gain_db:+.1f} dB "
+          f"(sesin {below:g} dB altı) + konuşmada ducking")
 
 
 # ElevenLabs çıktısı ~-24 LUFS geliyor; YouTube/telefonlar ~-14 LUFS bekler. Normalize

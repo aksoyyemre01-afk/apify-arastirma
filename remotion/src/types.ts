@@ -96,7 +96,8 @@ export type ShortProps = {
     music: string | null;
     musicVolume: number;
     sfxVolume: number;
-    sfx: {src: string; from: number}[];
+    // volume: efekt başına, seslendirmeye göre ölçülmüş kazanç (src/scene_planner.py _sfx_gain).
+    sfx: {src: string; from: number; volume?: number}[];
   };
   outro: Outro | null;
 };

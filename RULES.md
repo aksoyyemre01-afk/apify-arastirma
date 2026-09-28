@@ -135,13 +135,27 @@ Metin alanları boş bırakılabilir: seri adı boşsa video rozetsiz üretilir.
 ## 8. Müzik ve efektler
 
 `assets/audio/` içinde `music.mp3`, `whoosh.mp3`, `impact.mp3` varsa kullanılır:
-müzik tüm videoda düşük seviyede, whoosh sahne geçişlerinde, impact reveal
-anında ve düşüş grafiklerinde. Dosya yoksa o katman sessizce atlanır.
-Render'dan sonra ses -14 LUFS'a (true peak -1,5 dBTP) normalize edilir; ElevenLabs
-çıktısı ~-24 LUFS geldiği için normalizasyonsuz video neredeyse sessiz duyulur.
+müzik tüm videoda, whoosh sahne geçişlerinde, impact reveal anında ve düşüş
+grafiklerinde. Dosya yoksa o katman sessizce atlanır. whoosh/impact telifsiz olarak
+`tools/make_sfx.py` ile sentezlenir; müzik kullanıcının lisanslı dosyasıdır.
 
-**Uygulama:** `src/scene_planner.py` (sfx listesi), `remotion/src/Short.tsx`,
-`src/renderer.py` (`normalize_loudness`), `assets/audio/README.md`.
+**Müzik ve efektler seslendirmeyi asla bastırmaz.** Seviyeler sabit kazançla değil,
+seslendirmenin ölçülen seviyesine göre ayarlanır (sabit kazançta whoosh'lar konuşmadan
+1-4 dB, impact 6 dB yüksek çıkıyordu; yüksek masterlanmış bir müzik konuşmanın ancak
+birkaç dB altında kalıyordu):
+- efekt: sesin `whoosh_below_voice_db` (12) / `impact_below_voice_db` (6) altında;
+  impact ile aynı ana denk gelen whoosh atlanır;
+- müzik: taban seviyesi sesin `music_below_voice_db` (15) altında, ayrıca konuşma
+  olduğu anlarda sidechain ducking ile kısılır; duraklamalarda taban seviyeye döner.
+Son olarak mix -14 LUFS'a (true peak -1,5 dBTP) normalize edilir; ElevenLabs çıktısı
+~-24 LUFS geldiği için normalizasyonsuz video neredeyse sessiz duyulur.
+Ölçüm (Enron, çok yüksek masterlanmış -11,5 LUFS test müziğiyle): konuşmalı her 400 ms
+pencerede ses müziğin en az 14,3 dB üstünde (medyan 32 dB); whoosh'lar sesin 9-12 dB,
+impact'ler 3-4 dB altında.
+
+**Uygulama:** `src/scene_planner.py` (`_sfx_gain`, sfx listesi), `remotion/src/Short.tsx`,
+`src/renderer.py` (`add_music`, `music_duck_filter`, `normalize_loudness`),
+`tools/make_sfx.py`, `assets/audio/README.md`, `config/brand.json` → `audio`.
 
 ## 9. Haftalık plan
 

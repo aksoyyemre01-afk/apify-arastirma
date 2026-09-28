@@ -9,3 +9,6 @@ output/**/assets/
 remotion/node_modules/
 output/**/kareler/
 assets/logos/_not_found.json
+# Sentezlenmiş efektler repoda (tools/make_sfx.py ile yeniden üretilebilir); müzik lisanslı olduğu için dışarıda.
+!assets/audio/whoosh.mp3
+!assets/audio/impact.mp3

@@ -37,7 +37,7 @@ _DEFAULTS = {
         "next_part_template": "",
         "last_part_template": "",
     },
-    "audio": {"music_volume_db": -20, "sfx_volume_db": -6},
+    "audio": {"music_below_voice_db": 15, "whoosh_below_voice_db": 12, "impact_below_voice_db": 6},
 }
 
 
