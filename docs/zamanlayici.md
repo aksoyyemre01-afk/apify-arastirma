@@ -17,9 +17,10 @@ siz              python pipeline.py --approve        -> videolar yayina-hazir\<h
 ## Ön koşullar (bir kez)
 
 1. `.env` dosyasında `GEMINI_API_KEY` ve `ELEVENLABS_API_KEY` dolu olmalı.
-2. Elle bir kez deneyin (repo klasöründe, PowerShell):
+2. Elle bir kez deneyin (PowerShell):
    ```powershell
-   .\.venv\Scripts\python.exe pipeline.py --week
+   cd "<proje klasörü>"
+   & ".\.venv\Scripts\python.exe" "pipeline.py" --week
    ```
    `runs\...\review.md` oluşuyor ve bildirim geliyorsa hazırsınız. Denemeyi istemiyorsanız
    `runs\` altındaki o haftanın klasörünü silebilirsiniz.
@@ -27,12 +28,13 @@ siz              python pipeline.py --approve        -> videolar yayina-hazir\<h
 ## Kurulum — yöntem 1: PowerShell (önerilen, tek komut)
 
 PowerShell'i **normal kullanıcı olarak** açın (yönetici gerekmez), **proje klasörüne geçin**
-(`cd <proje klasörü>`) ve çalıştırın. Klasör yolu bulunduğunuz yerden alınır; hiçbir yolu
+(`cd "<proje klasörü>"`) ve çalıştırın. Klasör yolu bulunduğunuz yerden alınır; hiçbir yolu
 elle yazmanız gerekmez:
 
 ```powershell
 $repo = (Get-Location).Path
-$action  = New-ScheduledTaskAction -Execute "$repo\.venv\Scripts\pythonw.exe" -Argument "pipeline.py --week" -WorkingDirectory $repo
+$action  = New-ScheduledTaskAction -Execute "`"$repo\.venv\Scripts\pythonw.exe`"" `
+            -Argument "`"$repo\pipeline.py`" --week" -WorkingDirectory $repo
 $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At 08:00
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 1) `
             -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
@@ -40,6 +42,10 @@ Register-ScheduledTask -TaskName "ShortPipeline-Haftalik" -Action $action -Trigg
             -Description "Haftalık short konusu ve plan (pipeline.py --week)" -Force
 ```
 
+- Proje yolu boşluk içerebilir (ör. `YouTube Projesi`); bu yüzden program ve betik yolu
+  tırnak içinde verilir (`` `" `` PowerShell'de çift tırnağın kaçışıdır). **Çalışma klasörü
+  (`-WorkingDirectory`) ise tırnaksız kalmalıdır**: Görev Zamanlayıcı bu alanda tırnak kabul
+  etmez, tırnaklıyken görev 0x8007010B ("dizin adı geçersiz") hatasıyla başlamaz.
 - `-StartWhenAvailable`: bilgisayar pazartesi 08:00'de kapalıysa, açıldığında görev
   hemen çalışır.
 - Görev yalnızca siz oturum açmışken çalışır. Bu bilerek böyle: bildirimin görünmesi
@@ -55,10 +61,11 @@ Register-ScheduledTask -TaskName "ShortPipeline-Haftalik" -Action $action -Trigg
 3. **Tetikleyiciler** → **Yeni...** → "Zamanlamaya göre", **Haftalık**, başlangıç saati
    `08:00`, **Pazartesi** işaretli → Tamam.
 4. **Eylemler** → **Yeni...** → "Program başlat":
-   - Program/komut dosyası: `<proje klasörü>\.venv\Scripts\pythonw.exe`
-   - Bağımsız değişkenler: `pipeline.py --week`
-   - Başlama yeri: `<proje klasörü>`
-   (`<proje klasörü>` yerine projenin tam yolunu yazın; Görev Zamanlayıcı göreli yol kabul etmez.)
+   - Program/komut dosyası: `"<proje klasörü>\.venv\Scripts\pythonw.exe"` (tırnaklarla)
+   - Bağımsız değişkenler: `"<proje klasörü>\pipeline.py" --week` (tırnaklarla)
+   - Başlama yeri: `<proje klasörü>` (**tırnaksız**; bu alan tırnak kabul etmez, boşluk sorun değildir)
+   (`<proje klasörü>` yerine projenin tam yolunu yazın, ör. `C:\Users\<kullanıcı>\YouTube Projesi`;
+   Görev Zamanlayıcı göreli yol kabul etmez.)
    (`pythonw.exe` konsolsuzdur; `python.exe` yazarsanız her pazartesi bir pencere açılır.)
 5. **Koşullar**: "Bilgisayar AC güçteyse başlat" işaretini kaldırın (dizüstünde pilde de çalışsın).
 6. **Ayarlar**:
@@ -68,9 +75,11 @@ Register-ScheduledTask -TaskName "ShortPipeline-Haftalik" -Action $action -Trigg
 
 ## Kurulum — yöntem 3: schtasks (tek satır)
 
-Komut İstemi'nde (cmd) **proje klasörüne geçip** çalıştırın; `%CD%` bulunduğunuz klasörün yoludur:
+Komut İstemi'nde (cmd) **proje klasörüne geçip** çalıştırın; `%CD%` bulunduğunuz klasörün yoludur
+(yol boşluk içerebileceği için `\"...\"` ile tırnaklanır):
 
 ```bat
+cd /d "<proje klasörü>"
 schtasks /Create /TN "ShortPipeline-Haftalik" /TR "\"%CD%\.venv\Scripts\pythonw.exe\" \"%CD%\pipeline.py\" --week" /SC WEEKLY /D MON /ST 08:00 /F
 ```
 
@@ -88,18 +97,22 @@ yeni klasörde tekrar çalıştırmanız yeterli; `-Force`/`/F` ile eskisinin ü
 yeniden oluşturun:
 
 ```powershell
-Remove-Item -Recurse -Force .venv
-python -m venv .venv
-.\.venv\Scripts\pip install -r requirements.txt
+cd "<proje klasörü>"
+Remove-Item -Recurse -Force ".venv"
+python -m venv ".venv"
+& ".\.venv\Scripts\python.exe" -m pip install -r "requirements.txt"
 ```
+
+`python` komutu Microsoft Store'u açıyorsa (PATH'te yalnızca Store kısayolu var), Python'un tam
+yolunu tırnak içinde kullanın, ör. `& "$env:LOCALAPPDATA\Python\pythoncore-3.14-64\python.exe" -m venv ".venv"`.
 
 ## Test ve kontrol
 
 ```powershell
 Start-ScheduledTask -TaskName "ShortPipeline-Haftalik"      # şimdi çalıştır
 Get-ScheduledTaskInfo -TaskName "ShortPipeline-Haftalik"      # son çalışma zamanı ve sonucu (0 = başarılı)
-Get-Content runs\pipeline-konsol.log -Tail 30                 # görevin çıktısı (pythonw)
-.\.venv\Scripts\python.exe pipeline.py --status               # haftanın durumu ve maliyeti
+Get-Content "runs\pipeline-konsol.log" -Tail 30               # görevin çıktısı (pythonw)
+& ".\.venv\Scripts\python.exe" "pipeline.py" --status         # haftanın durumu ve maliyeti
 ```
 
 Aynı hafta için ikinci bir çalıştırma başlatılmaz; görev yanlışlıkla iki kez çalışırsa ikincisi
