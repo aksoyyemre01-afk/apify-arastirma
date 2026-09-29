@@ -7,6 +7,8 @@ Onaylar runs/<hafta>/review.md üzerinden tek komutla verilir.
 Kullanım:
     python pipeline.py --week                     # haftanın konusunu seç, planla -> review.md (onay 1)
     python pipeline.py --week --topic kodak       # belirli bir konuyla başlat
+    python pipeline.py --week --topic kodak --run 2026-W40-kodak --brief-file not.md
+                                                  # aynı hafta için ayrı çalıştırma + editör notu
     python pipeline.py --approve                  # bekleyen aşamayı onayla
     python pipeline.py --reject "gerekçe"         # reddet (onay 1: yeni konu; onay 2: düzelttir)
     python pipeline.py --reject "gerekçe" --keep-topic   # onay 1: konuyu koru, planı gerekçeyle yeniden üret
@@ -110,20 +112,31 @@ def _finish_report(ctx: RunContext) -> None:
 
 # ---------------------------------------------------------------------------- aşamalar
 
-def cmd_week(topic_id: str | None) -> None:
-    run_id = _week_id()
-    path = RUNS_DIR / run_id
-    n = 2
-    while (path / "state.json").exists():
-        existing = RunContext(path)
-        if existing.stage != "published":
-            raise SystemExit(f"{run_id} için bir çalıştırma zaten var (aşama: {existing.stage}). "
-                             f"Durum: python pipeline.py --status --run {path.name}")
-        path = RUNS_DIR / f"{run_id}-{n}"
-        n += 1
+def cmd_week(topic_id: str | None, run_name: str | None = None, brief: str | None = None) -> None:
+    """run_name: aynı hafta için ayrı bir çalıştırma (ör. 2026-W40-enron); var olan bir
+    çalıştırmanın üzerine yazılmaz. brief: bu çalıştırmaya özel editör notu (plan + script'e girer)."""
+    if run_name:
+        path = RUNS_DIR / run_name
+        if (path / "state.json").exists():
+            raise SystemExit(f"{run_name} adlı çalıştırma zaten var. Durum: python pipeline.py --status --run {run_name}")
+    else:
+        run_id = _week_id()
+        path = RUNS_DIR / run_id
+        n = 2
+        while (path / "state.json").exists():
+            existing = RunContext(path)
+            if existing.stage != "published":
+                raise SystemExit(f"{run_id} için bir çalıştırma zaten var (aşama: {existing.stage}). "
+                                 f"Durum: python pipeline.py --status --run {path.name}\n"
+                                 f"Aynı hafta için ayrı bir çalıştırma: --week --run {run_id}-<ad>")
+            path = RUNS_DIR / f"{run_id}-{n}"
+            n += 1
     ctx = RunContext(path)
     attach_usage_hooks(ctx)
     ctx.log("pipeline", f"Yeni haftalık çalıştırma: {path.name}")
+    if brief:
+        ctx.state["brief"] = brief
+        ctx.log("insan", "Editör notu (bu çalıştırmaya özel):", brief)
     _plan_for_review(ctx, topic_id=topic_id)
     rp = review.write(ctx)
     notify("Haftanın konusu hazır", f"{ctx.state['topic']['title']} — onay için review.md")
@@ -164,7 +177,7 @@ def cmd_approve(ctx: RunContext) -> None:
         raise SystemExit(f"Onay bekleyen bir aşama yok (aşama: {stage}).")
 
 
-def cmd_reject(ctx: RunContext, reason: str, short: int | None, keep_topic: bool = False) -> None:
+def cmd_reject(ctx: RunContext, reason: str, short: list[int] | None, keep_topic: bool = False) -> None:
     stage = ctx.stage
     if keep_topic and stage != "topic_review":
         raise SystemExit("--keep-topic yalnızca konu onayı aşamasında kullanılır.")
@@ -188,9 +201,9 @@ def cmd_reject(ctx: RunContext, reason: str, short: int | None, keep_topic: bool
         print(f"Yeni konu önerildi. Onay dosyası: {rp}")
         _finish_report(ctx)
     elif stage == "final_review":
-        targets = [short - 1] if short else [0, 1, 2]
+        targets = [s - 1 for s in short] if short else [0, 1, 2]
         if any(t not in (0, 1, 2) for t in targets):
-            raise SystemExit("--short 1, 2 ya da 3 olmalı.")
+            raise SystemExit("--short 1, 2 ya da 3 olmalı (birden fazlası virgülle: 2,3).")
         for t in targets:
             rec = ctx.state["shorts"][str(t)]
             rec["human_feedback"] = reason
@@ -354,13 +367,16 @@ if __name__ == "__main__":
     g.add_argument("--continue", dest="cont", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--run", help="Çalıştırma kimliği (ör. 2026-W40); varsayılan en son")
     p.add_argument("--topic", help="--week ile: konu bankasından belirli bir konu id'si")
-    p.add_argument("--short", type=int, help="--reject ile: yalnızca bu short (1-3)")
+    p.add_argument("--short", type=lambda v: [int(x) for x in v.split(",")],
+                   help="--reject ile: yalnızca bu short(lar) (1-3; birden fazlası virgülle: 2,3)")
+    p.add_argument("--brief-file", help="--week ile: bu çalıştırmaya özel editör notu (UTF-8 metin dosyası); "
+                                        "plana ve script'lere girer, RULES.md'yi değiştirmez")
     p.add_argument("--keep-topic", action="store_true",
                    help="--reject ile, konu onayında: konuyu koru, planı gerekçeyle yeniden üret")
     a = p.parse_args()
 
     if a.week:
-        cmd_week(a.topic)
+        cmd_week(a.topic, a.run, Path(a.brief_file).read_text(encoding="utf-8-sig") if a.brief_file else None)
     elif a.cont:
         produce(_open(a.run))
     elif a.approve:

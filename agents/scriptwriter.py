@@ -58,7 +58,11 @@ def revise(ctx: RunContext, index: int, feedback: list[str], source: str) -> Sho
     before = load(ctx, index)
     ctx.log(AGENT, f"{ctx.state['plan']['days'][index]} revizyonu ({source} geri bildirimi, {len(feedback)} madde)",
             "\n".join(f"- {f}" for f in feedback))
-    after = script_writer._revise(before, feedback)
+    # Çalıştırmaya özel editör notu revizyonlarda da geçerlidir (ör. bölümler arası geçiş cümleleri).
+    brief = (ctx.state.get("brief") or "").strip()
+    note = ([f"Bu düzeltmeyi yaparken editörün bu seri için talimatlarını koru (bu script {index + 1}/3. "
+             f"bölümdür; yalnızca bu bölüme ve tüm bölümlere ortak olanlar geçerli):\n{brief}"] if brief else [])
+    after = script_writer._revise(before, feedback + note)
     save(ctx, index, after)
     diff = "\n".join(difflib.unified_diff(
         [f"{i + 1}. [{s.scene_type}] {s.narration}" for i, s in enumerate(before.scenes)],

@@ -65,7 +65,8 @@ RESEARCH_PROMPT = """Google'da araştır: Aşağıdaki YouTube Shorts cümleleri
 tutarları, yüzdeler, yıllar/tarihler, kişi/şirket adları ve olaylar doğru mu? Ekrandaki
 alanlardaki (value, unit, year, label, text, left_value, right_value, end_value) değerleri de
 kontrol et. Her biri için web'de ara, güvenilir kaynaklarda ne yazdığını kısaca açıkla ve
-farklılık varsa doğrusunu belirt. Yorum/görüş cümlelerini ve soruları atla.
+farklılık varsa doğrusunu belirt. Yorum/görüş cümlelerini, soruları ve seriye atıf yapan geçiş
+cümlelerini ("önceki bölümde…", "sıradaki bölümde…", "takipte kalın") atla.
 
 Konu: {topic}
 
@@ -73,7 +74,8 @@ Konu: {topic}
 
 JUDGE_PROMPT = """Aşağıda bir YouTube Shorts script'i, bu script için yapılmış bir web araştırmasının
 metni ve araştırmada bulunan NUMARALI kaynak listesi var. Script'teki her olgusal iddia için
-(rakam, tarih, olay; yorum ve sorular hariç) araştırmaya dayanarak karar ver:
+(rakam, tarih, olay; yorum, sorular ve seriye atıf yapan geçiş cümleleri - "önceki bölümde…",
+"sıradaki bölümde…" - hariç; bunlar iddia değildir, listeye alma) araştırmaya dayanarak karar ver:
 - verified: araştırma iddiayı destekliyor (makul yuvarlama kabul).
 - incorrect: araştırma farklı bir değer veriyor; `correct` alanına doğrusunu yaz.
 - unverifiable: araştırmada bu iddiaya dair bilgi yok ya da kaynaklar çelişiyor.

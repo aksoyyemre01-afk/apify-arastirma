@@ -43,7 +43,7 @@ PLAN_PROMPT = """Sen bir YouTube Shorts serisi için araştırma editörüsün.
 Konu: {title}
 Şirket: {company}
 Olayın özeti: {angle}
-{rejection}
+{brief}{rejection}
 Bu konuyu, haftanın üç gününde ({days}) yayınlanacak 3 short'a böl. Kurallar:
 - Her short aynı hikâyenin FARKLI bir evresini anlatır: 1) giriş/yükseliş, 2) zirve ve
   kritik karar, 3) çöküş/sonuç ve ders. Kronolojik sıra korunur.
@@ -65,9 +65,19 @@ bölüm yapısı (3 bölüm, kronolojik, olaylar bölümler arasında tekrar etm
 bölümün key_events listesi yine 3-5 somut ve doğru olay içermeli. Metinler Türkçe.
 
 Konu: {title} ({company})
-
+{brief}
 Plan:
 {plan}"""
+
+
+def _brief_block(ctx: RunContext) -> str:
+    """Bu çalıştırmaya özel editör notu (--brief-file); bölüm yapısı verdiyse o esas alınır."""
+    brief = (ctx.state.get("brief") or "").strip()
+    if not brief:
+        return ""
+    return ("\nEditörün bu seri için talimatları (bölüm yapısı ve içerik istekleri; aşağıdaki "
+            "genel bölümleme kurallarıyla çelişirse editörün yapısı esas alınır):\n"
+            f"\"\"\"\n{brief}\n\"\"\"\n")
 
 
 def _generate(ctx: RunContext, prompt: str, purpose: str) -> None:
@@ -119,7 +129,7 @@ def plan_week(ctx: RunContext, topic_id: str | None = None, keep_topic: bool = F
                       "düzeltmeleri esas al:\n" + "\n".join(f"- {r}" for r in feedback) + "\n")
     prompt = PLAN_PROMPT.format(
         title=topic["title"], company=topic.get("company", ""), angle=topic.get("angle", ""),
-        rejection=rejection, days=", ".join(DAYS),
+        rejection=rejection, days=", ".join(DAYS), brief=_brief_block(ctx),
     )
     _generate(ctx, prompt, purpose="hafta planı")
     ctx.state["topic"] = topic
@@ -138,7 +148,8 @@ def revise_plan(ctx: RunContext, feedback: list[str], source: str) -> None:
             "\n".join(f"- {f}" for f in feedback))
     plan_json = json.dumps({k: v for k, v in before.items() if k != "days"}, ensure_ascii=False, indent=1)
     _generate(ctx, REVISE_PLAN_PROMPT.format(feedback="\n".join(f"- {f}" for f in feedback), title=topic["title"],
-                                             company=topic.get("company", ""), plan=plan_json),
+                                             company=topic.get("company", ""), plan=plan_json,
+                                             brief=_brief_block(ctx)),
               purpose="hafta planı revizyonu")
     diff = "\n".join(difflib.unified_diff(_plan_listing(before).splitlines(),
                                           _plan_listing(ctx.state["plan"]).splitlines(),
@@ -180,5 +191,8 @@ def part_focus_block(ctx: RunContext, index: int, previous_narrations: list[str]
     if previous_narrations:
         lines.append("Önceki bölüm(ler)de anlatılanlar (TEKRAR ETME):")
         lines += [f"- Bölüm {i + 1}: {t}" for i, t in enumerate(previous_narrations)]
+    brief = _brief_block(ctx)
+    if brief:
+        lines.append(brief.strip("\n") + "\nBu talimatlardan yalnızca BU bölüme ve tüm bölümlere ortak olanları uygula.")
     lines.append("")
     return "\n".join(lines)

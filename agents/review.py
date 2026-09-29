@@ -58,6 +58,11 @@ def _topic_section(ctx: RunContext) -> list[str]:
         "",
         plan["topic_summary"],
         "",
+    ]
+    if ctx.state.get("brief"):
+        lines += ["<details><summary>Editör notu (bu çalıştırmaya özel)</summary>", "",
+                  ctx.state["brief"].strip(), "", "</details>", ""]
+    lines += [
         "## Bölüm planı",
         "",
         "| Gün | Başlık | Odak | Olaylar | Kapanış kancası |",
