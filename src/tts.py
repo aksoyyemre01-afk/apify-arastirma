@@ -25,6 +25,14 @@ def _get_client() -> ElevenLabs:
 # Kullanım/maliyet takibi için isteğe bağlı kanca: fn(karakter_sayısı, model_id).
 # agents/ katmanı (pipeline.py) atar; atanmamışsa hiçbir şey yapılmaz.
 USAGE_HOOK = None
+# Kredi kilidi: fn(metin), her seslendirmeden ÖNCE çağrılır; kredi yetmiyorsa (ya da
+# okunamıyorsa) hata fırlatır ve istek gönderilmez. agents/limits.py atar.
+PRE_REQUEST_HOOK = None
+
+
+def _check_quota(text: str) -> None:
+    if PRE_REQUEST_HOOK:
+        PRE_REQUEST_HOOK(text)
 
 
 def _report_usage(text: str, model_id: str) -> None:
@@ -33,6 +41,7 @@ def _report_usage(text: str, model_id: str) -> None:
 
 
 def synthesize(text: str, output_path: str) -> None:
+    _check_quota(text)
     client = _get_client()
     voice_id = os.environ.get("ELEVENLABS_VOICE_ID") or DEFAULT_VOICE_ID
     model_id = os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2")
@@ -81,6 +90,7 @@ def synthesize_with_timestamps(text: str, output_path: str) -> list[dict] | None
     kelime bazlı zamanlama listesi de döner. Timestamp endpoint'i kullanılamazsa
     (SDK/plan/hesap desteklemiyorsa) sessizce düz `synthesize()`'a düşer ve None döner
     - çağıran taraf bu durumda altyazı için tahmini zamanlamaya geçmeli."""
+    _check_quota(text)  # try dışında: kredi hatası düz synthesize()'a düşmeden durdurur
     try:
         client = _get_client()
         voice_id = os.environ.get("ELEVENLABS_VOICE_ID") or DEFAULT_VOICE_ID

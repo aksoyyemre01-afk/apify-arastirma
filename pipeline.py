@@ -41,7 +41,7 @@ if sys.stdout is None or sys.stderr is None:
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-from agents import critic, director, researcher, review, scriptwriter, verifier  # noqa: E402
+from agents import critic, director, limits, researcher, review, scriptwriter, verifier  # noqa: E402
 from agents.base import CONFIG, RUNS_DIR, BudgetExceeded, RunContext, attach_usage_hooks, notify  # noqa: E402
 from src import proc
 from src import state as topic_state  # noqa: E402
@@ -106,8 +106,35 @@ def _spawn_worker(ctx: RunContext) -> None:
 
 
 def _finish_report(ctx: RunContext) -> None:
-    print("\nKullanım ve tahmini maliyet:\n" + ctx.cost_report())
-    ctx.log("pipeline", f"Toplam tahmini maliyet: ${ctx.cost_summary()['total_usd']:.4f}")
+    balance = limits.balance_report()
+    print("\nKullanım ve tahmini maliyet:\n" + ctx.cost_report() + "\n\nKalan bakiye / kredi:\n" + balance)
+    ctx.log("pipeline", f"Toplam tahmini maliyet: ${ctx.cost_summary()['total_usd']:.4f}", "Kalan bakiye / kredi:\n" + balance)
+
+
+def _pending_tts_chars(ctx: RunContext) -> int:
+    """Bitmemiş short'ların seslendirmesi için tahmini karakter (yeniden seslendirme payı dahil)."""
+    pending = [r for r in ctx.state.get("shorts", {}).values() if r.get("status") not in ("passed", "failed")]
+    pending += [None] * (3 - len(ctx.state.get("shorts", {})))  # henüz hiç başlamamış short'lar
+    return len(pending) * limits.estimated_chars_per_short()
+
+
+def _check_limits(ctx: RunContext) -> None:
+    """Üretimden önce: haftalık Gemini bütçesi ve ElevenLabs kredisi (yetmiyorsa BudgetExceeded)."""
+    ctx.check_budget()
+    needed = _pending_tts_chars(ctx)
+    if needed:
+        st = limits.tts_guard(needed, "kalan short'ların seslendirmesi")
+        ctx.log("pipeline", f"ElevenLabs kredisi yeterli: ~{needed:,} karakter gerekiyor, kalan {st['remaining']:,}.")
+
+
+def _stop_for_limits(ctx: RunContext, e: BudgetExceeded, where: str) -> None:
+    """Sert durdurma: onayla aşılamaz; yalnızca config'deki limit değişince --approve devam ettirir."""
+    ctx.log("pipeline", f"DURDURULDU (harcama sınırı): {e}")
+    ctx.state["worker_pid"] = None
+    ctx.state["limit_stop"] = {"reason": str(e), "where": where}
+    ctx.set_stage("budget_stopped")
+    review.write(ctx)
+    notify("Harcama sınırı — pipeline durdu", str(e)[:200])
 
 
 # ---------------------------------------------------------------------------- aşamalar
@@ -145,10 +172,17 @@ def cmd_week(topic_id: str | None, run_name: str | None = None, brief: str | Non
 
 
 def _plan_for_review(ctx: RunContext, topic_id: str | None = None, keep_topic: bool = False) -> None:
-    """Araştırmacı planlar, Doğrulayıcı planı kontrol edip düzelttirir; ardından konu onayı."""
-    researcher.plan_week(ctx, topic_id, keep_topic=keep_topic)
-    ctx.check_budget()
-    verifier.verify_plan(ctx)
+    """Araştırmacı planlar, Doğrulayıcı planı kontrol edip düzelttirir; ardından konu onayı.
+    Bütçe aşılacaksa planlama durur (budget_stopped) ve komut hata koduyla biter."""
+    try:
+        ctx.check_budget()
+        researcher.plan_week(ctx, topic_id, keep_topic=keep_topic)
+        ctx.check_budget()
+        verifier.verify_plan(ctx)
+    except BudgetExceeded as e:
+        _stop_for_limits(ctx, e, "plan")
+        _finish_report(ctx)
+        raise SystemExit(f"Durduruldu: {e}")
     ctx.set_stage("topic_review")
 
 
@@ -160,11 +194,25 @@ def cmd_approve(ctx: RunContext) -> None:
     elif stage == "final_review":
         ctx.log("insan", "Final videolar onaylandı.")
         publish(ctx)
-    elif stage == "budget_paused":
-        ctx.budget_extra += float(CONFIG.get("budget_usd_per_week", 2.0))
-        ctx.state["budget_extra_usd"] = ctx.budget_extra
-        ctx.log("insan", f"Bütçe artırıldı (+${CONFIG.get('budget_usd_per_week', 2.0)}); üretime devam.")
-        _spawn_worker(ctx)
+    elif stage in ("budget_stopped", "budget_paused"):
+        # Onay limiti aşamaz: yalnızca config'deki limitler (ya da yenilenen kredi) artık
+        # yetiyorsa devam edilir.
+        where = ctx.state.get("limit_stop", {}).get("where", "produce")
+        try:
+            if where == "plan":
+                ctx.check_budget()
+            else:
+                _check_limits(ctx)
+        except BudgetExceeded as e:
+            raise SystemExit(f"Harcama sınırı hâlâ aşılıyor; onayla devam edilemez.\n{e}")
+        ctx.state.pop("limit_stop", None)
+        ctx.log("insan", "Limitler artık yeterli; kaldığı yerden devam.")
+        if where == "plan":
+            _plan_for_review(ctx, keep_topic="topic" in ctx.state)
+            review.write(ctx)
+            _finish_report(ctx)
+        else:
+            _spawn_worker(ctx)
     elif stage == "error":
         ctx.state.pop("error", None)
         ctx.log("insan", "Hatadan sonra yeniden deneme onaylandı.")
@@ -221,6 +269,7 @@ def produce(ctx: RunContext) -> None:
     ctx.state["worker_pid"] = os.getpid()
     ctx.save()
     try:
+        _check_limits(ctx)  # çalıştırmadan önce: bütçe + ElevenLabs kalan kredi
         narrations: list[str] = []
         for i in range(3):
             _produce_one(ctx, i, narrations)
@@ -232,12 +281,8 @@ def produce(ctx: RunContext) -> None:
         failed = [ctx.state["plan"]["days"][int(i)] for i, r in ctx.state["shorts"].items() if r.get("status") == "failed"]
         notify("Haftanın videoları hazır" if not failed else "Videolar hazır — bazıları QA'dan geçmedi",
                "Final onayı için review.md" + (f" (sorunlu: {', '.join(failed)})" if failed else ""))
-    except BudgetExceeded as e:
-        ctx.log("pipeline", f"Durduruldu: {e}")
-        ctx.state["worker_pid"] = None
-        ctx.set_stage("budget_paused")
-        review.write(ctx)
-        notify("Bütçe sınırı", f"{e}. Devam için review.md")
+    except BudgetExceeded as e:  # QuotaExceeded (ElevenLabs) dahil
+        _stop_for_limits(ctx, e, "produce")
     except Exception as e:  # noqa: BLE001 - her hata raporlanır, işçi sessizce ölmez
         ctx.state["error"] = "".join(traceback.format_exception(e))[-3000:]
         ctx.log("pipeline", f"HATA: {e}", ctx.state["error"])

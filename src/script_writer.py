@@ -259,12 +259,17 @@ RETRY_DELAYS_SECONDS = (5, 15, 45)
 # Kullanım/maliyet takibi için isteğe bağlı kanca: fn(response, amaç). agents/ katmanı
 # (pipeline.py) atar; atanmamışsa hiçbir şey yapılmaz.
 USAGE_HOOK = None
+# Bütçe kilidi: fn(amaç), her istekten (tekrar denemeler dahil) ÖNCE çağrılır; bütçe
+# aşılacaksa hata fırlatır ve istek gönderilmez. agents/limits.py atar.
+PRE_REQUEST_HOOK = None
 
 
 def generate_raw(contents, config: types.GenerateContentConfig, purpose: str, model: str | None = None):
     """Tek Gemini isteği; yalnızca 503'te artan beklemeyle 3 kez daha dener (429 ve diğer
     hatalar asla tekrar denenmez). Yanıt nesnesini döner; kullanım kancaya bildirilir."""
     for attempt in range(len(RETRY_DELAYS_SECONDS) + 1):
+        if PRE_REQUEST_HOOK:
+            PRE_REQUEST_HOOK(purpose)
         try:
             response = _get_client().models.generate_content(model=model or MODEL, contents=contents, config=config)
             if USAGE_HOOK:

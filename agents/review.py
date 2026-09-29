@@ -5,14 +5,16 @@ from pathlib import Path
 
 from src.schemas import ShortScript
 
-from . import scriptwriter
-from .base import CONFIG, RunContext
+from . import limits, scriptwriter
+from .base import RunContext
 
 STAGE_TEXT = {
     "topic_review": "⏸ **Konu onayı bekleniyor.**",
     "producing": "⏳ Üretim sürüyor (arka planda). Bittiğinde bu dosya güncellenir ve bildirim gelir.",
     "final_review": "⏸ **Yayın öncesi final onayı bekleniyor.**",
-    "budget_paused": "⏸ **Bütçe sınırına ulaşıldı; devam etmek için onay gerekiyor.**",
+    "budget_stopped": "⛔ **Harcama sınırı nedeniyle durdu.** Onayla aşılamaz; yalnızca config'deki limit "
+                      "değiştirilerek (ya da ElevenLabs kredisi yenilenince) devam edilebilir.",
+    "budget_paused": "⛔ **Harcama sınırı nedeniyle durdu** (eski sürüm).",
     "published": "✅ Onaylandı ve yayına hazır klasörüne kopyalandı.",
     "error": "❌ Pipeline bir hatayla durdu (ayrıntı log.md'de).",
 }
@@ -38,8 +40,14 @@ def _commands(ctx: RunContext) -> list[str]:
             f"- Reddet ve düzelttir (tümü): `python pipeline.py --reject \"gerekçe\" --run {run}`",
             f"- Yalnızca bir short'u düzelttir: `python pipeline.py --reject \"gerekçe\" --short 2 --run {run}`",
         ]
-    if stage == "budget_paused":
-        return ["## Karar", "", f"- Bütçeyi bir hafta sınırı kadar artırıp devam et: `python pipeline.py --approve --run {run}`"]
+    if stage in ("budget_stopped", "budget_paused"):
+        reason = ctx.state.get("limit_stop", {}).get("reason", "")
+        return ["## Neden durdu", "", f"> {reason}" if reason else "", "",
+                "## Devam etmek için", "",
+                "1. `config/pipeline.json` içinde `gemini_budget_usd_per_week` ya da `elevenlabs` sınırını "
+                "bilerek artırın (ya da ElevenLabs kredisinin yenilenmesini bekleyin).",
+                f"2. `python pipeline.py --approve --run {run}` — limitler yeniden kontrol edilir; hâlâ "
+                "aşılıyorsa devam etmez."]
     if stage == "error":
         return ["## Karar", "", f"- Kaldığı yerden yeniden dene: `python pipeline.py --approve --run {run}`"]
     return []
@@ -228,9 +236,9 @@ def write(ctx: RunContext) -> Path:
             for i in range(3):
                 lines += _short_section(ctx, i)
             lines += _topic_section(ctx)
-    lines += ["## Kullanım ve tahmini maliyet", "", ctx.cost_report(), "",
-              f"_Haftalık bütçe sınırı: ${float(CONFIG.get('budget_usd_per_week', 2.0)) + ctx.budget_extra:.2f}. "
-              f"Ayrıntılı kararlar ve revizyon geçmişi: [log.md](log.md)._", ""]
+    lines += ["## Kullanım ve tahmini maliyet (bu çalıştırma)", "", ctx.cost_report(), "",
+              "## Kalan bakiye / kredi", "", limits.balance_report(), "",
+              "_Ayrıntılı kararlar ve revizyon geçmişi: [log.md](log.md)._", ""]
     path = ctx.dir / "review.md"
     path.write_text("\n".join(lines), encoding="utf-8")
     return path

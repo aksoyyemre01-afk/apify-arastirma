@@ -38,7 +38,6 @@ class RunContext:
         self.state: dict = json.loads(self.state_path.read_text(encoding="utf-8")) if self.state_path.exists() else {}
         self.usage: list[dict] = json.loads(self.usage_path.read_text(encoding="utf-8")) if self.usage_path.exists() else []
         self.current_agent = "pipeline"
-        self.budget_extra = float(self.state.get("budget_extra_usd", 0.0))
 
     # ------------------------------------------------------------------ durum
     def save(self) -> None:
@@ -138,10 +137,10 @@ class RunContext:
         return "\n".join(lines)
 
     def check_budget(self) -> None:
-        limit = float(CONFIG.get("budget_usd_per_week", 2.0)) + self.budget_extra
-        total = self.cost_summary()["total_usd"]
-        if total > limit:
-            raise BudgetExceeded(f"Tahmini maliyet ${total:.2f}, haftalık sınır ${limit:.2f}")
+        """Adım başlamadan önce haftalık Gemini bütçesi (sert sınır, agents/limits.py)."""
+        from . import limits
+
+        limits.gemini_guard(f"{self.current_agent} adımı")
 
 
 def _add_monthly_searches(n: int) -> None:
@@ -159,11 +158,15 @@ def _monthly_searches() -> int:
 
 
 def attach_usage_hooks(ctx: RunContext) -> None:
-    """Mevcut modüllerin (script_writer, tts) çağrılarını bu çalıştırmanın sayacına bağlar."""
+    """Mevcut modüllerin (script_writer, tts) çağrılarını bu çalıştırmanın sayacına ve
+    harcama kilitlerine (agents/limits.py) bağlar."""
     from src import script_writer, tts
+
+    from . import limits
 
     script_writer.USAGE_HOOK = ctx.record_gemini
     tts.USAGE_HOOK = ctx.record_tts
+    limits.attach_guards()
 
 
 def model_for(kind: str) -> str:

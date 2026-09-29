@@ -132,4 +132,5 @@ Unregister-ScheduledTask -TaskName "ShortPipeline-Haftalik" -Confirm:$false   # 
 | Görev "0x1" ile bitti | `runs\pipeline-konsol.log`'a bakın. Çoğunlukla `.env` anahtarı eksiktir. |
 | Bildirim gelmedi | Görev siz oturum açmamışken çalışmış olabilir; `review.md` yine oluşur. `--status` ile kontrol edin. |
 | Üretim yarıda kaldı (bilgisayar kapandı) | `python pipeline.py --status` "DURMUŞ" der; `python pipeline.py --approve` kaldığı yerden devam ettirir. |
-| "bütçe sınırı" bildirimi | Tahmini haftalık maliyet `config\pipeline.json` → `budget_usd_per_week` değerini aştı. `--approve` bir hafta sınırı kadar ek bütçe verip devam ettirir. |
+| "Harcama sınırı — pipeline durdu" bildirimi | Ya bu haftanın Gemini harcaması (`config\pipeline.json` → `gemini_budget_usd_per_week`, haftanın tüm çalıştırmaları toplamı) aşılacaktı, ya da ElevenLabs'in aylık sınırı içinde kalan kredi yetmiyor / okunamıyor. Pipeline tamamen durur; `--approve` sınırı aşamaz. Devam için limiti config'de bilerek artırın (ya da kredi yenilenmesini bekleyin), sonra `--approve`. |
+| "ElevenLabs kalan kredisi okunamadı" | API anahtarında `user_read` izni yok. ElevenLabs → Developers → API Keys → anahtarı düzenleyin → **User: Read** iznini açın. |
