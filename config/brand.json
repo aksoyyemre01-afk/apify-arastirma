@@ -1,6 +1,6 @@
 {
   "_aciklama": "Kanal/seri kimliği. Koddaki hiçbir yerde kanal/seri adı yoktur; hepsi buradan okunur. Metin alanları boş bırakılabilir: series_name boşsa rozet ve outro'daki seri adı hiç çizilmez. Başka bir dosya kullanmak için BRAND_CONFIG ortam değişkenine yol verin.",
-  "series_name": "",
+  "series_name": "Kurumsal Dedektif",
   "badge_text": "",
   "palette": {
     "background": "#0B1020",
@@ -23,7 +23,7 @@
   "outro": {
     "enabled": true,
     "seconds": 2.6,
-    "follow_text": "",
+    "follow_text": "Kurumsal Dedektif'i takip et",
     "next_part_template": "",
     "last_part_template": ""
   },

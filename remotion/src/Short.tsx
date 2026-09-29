@@ -147,6 +147,8 @@ const Outro: React.FC<{o: OutroProps}> = ({o}) => {
   const s = enterProgress(frame, 0, 12);
   const words = o.cta.split(/\s+/).filter(Boolean);
   const button = enterProgress(frame, 12, 10);
+  // Takip butonu tek satırdır: uzun metinde (ör. kanal adı içeren) yazı küçülür, satır kırılmaz.
+  const followSize = Math.min(56, Math.floor(1300 / ((o.followText || '').length + 2)));
   return (
     <AbsoluteFill style={{background: `${palette.background}F2`, opacity: interpolate(frame, [0, 6], [0, 1], clamp)}}>
       <div
@@ -192,10 +194,11 @@ const Outro: React.FC<{o: OutroProps}> = ({o}) => {
             style={{
               fontFamily: HEADING,
               fontWeight: 900,
-              fontSize: 56,
+              fontSize: followSize,
+              whiteSpace: 'nowrap',
               color: palette.card_text,
               background: palette.accent,
-              padding: '22px 60px',
+              padding: '22px 48px',
               borderRadius: 80,
               opacity: button,
               transform: `translateY(${px((1 - button) * 30)}px)`,
