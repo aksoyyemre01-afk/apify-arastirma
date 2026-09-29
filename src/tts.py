@@ -5,6 +5,8 @@ import os
 
 from elevenlabs.client import ElevenLabs
 
+from . import tr_numbers
+
 # "Brian" - ElevenLabs hesaplarına otomatik eklenen premade seslerden biri,
 # free planda API üzerinden kullanılabilir (library/shared sesler free planda kullanılamaz).
 DEFAULT_VOICE_ID = "nPczCjzI2devNBz1zQrb"
@@ -41,6 +43,7 @@ def _report_usage(text: str, model_id: str) -> None:
 
 
 def synthesize(text: str, output_path: str) -> None:
+    text = tr_numbers.to_spoken(text)  # rakamlar Türkçe yazıyla (TTS yanlış okumasın)
     _check_quota(text)
     client = _get_client()
     voice_id = os.environ.get("ELEVENLABS_VOICE_ID") or DEFAULT_VOICE_ID
@@ -89,8 +92,13 @@ def synthesize_with_timestamps(text: str, output_path: str) -> list[dict] | None
     """Ses dosyasını üretir; mümkünse ElevenLabs'in karakter bazlı zaman kodlarından
     kelime bazlı zamanlama listesi de döner. Timestamp endpoint'i kullanılamazsa
     (SDK/plan/hesap desteklemiyorsa) sessizce düz `synthesize()`'a düşer ve None döner
-    - çağıran taraf bu durumda altyazı için tahmini zamanlamaya geçmeli."""
-    _check_quota(text)  # try dışında: kredi hatası düz synthesize()'a düşmeden durdurur
+    - çağıran taraf bu durumda altyazı için tahmini zamanlamaya geçmeli.
+
+    ElevenLabs'e rakamlar Türkçe yazıyla gider ("11" -> "on bir"); dönen kelime zamanları
+    orijinal kelimelere geri eşlenir, böylece altyazı ve sahne hizalaması rakamlı metinle
+    çalışmaya devam eder."""
+    spoken, groups = tr_numbers.spoken_form(text)
+    _check_quota(spoken)  # try dışında: kredi hatası düz synthesize()'a düşmeden durdurur
     try:
         client = _get_client()
         voice_id = os.environ.get("ELEVENLABS_VOICE_ID") or DEFAULT_VOICE_ID
@@ -99,16 +107,16 @@ def synthesize_with_timestamps(text: str, output_path: str) -> list[dict] | None
         result = client.text_to_speech.convert_with_timestamps(
             voice_id=voice_id,
             model_id=model_id,
-            text=text,
+            text=spoken,
         )
 
         audio_bytes = base64.b64decode(result.audio_base_64)
         with open(output_path, "wb") as f:
             f.write(audio_bytes)
-        _report_usage(text, model_id)
+        _report_usage(spoken, model_id)
 
         alignment = result.alignment
-        return _characters_to_words(
+        words = _characters_to_words(
             alignment.characters,
             alignment.character_start_times_seconds,
             alignment.character_end_times_seconds,
@@ -116,3 +124,18 @@ def synthesize_with_timestamps(text: str, output_path: str) -> list[dict] | None
     except Exception:
         synthesize(text, output_path)
         return None
+    return _regroup(words, text.split(), groups)
+
+
+def _regroup(words: list[dict], originals: list[str], groups: list[int]) -> list[dict] | None:
+    """Okunuş kelimelerinin zamanlarını orijinal kelimelere toplar: 'on','bir' -> '11'.
+    Sayılar tutmazsa (beklenmeyen hizalama) None döner; çağıran tahmini zamanlamaya geçer."""
+    if len(words) != sum(groups):
+        print(f"   UYARI: kelime zamanları eşlenemedi ({len(words)} okunuş kelimesi, beklenen {sum(groups)}).")
+        return None
+    out, k = [], 0
+    for word, n in zip(originals, groups):
+        part = words[k:k + n]
+        out.append({"word": word, "start": part[0]["start"], "end": part[-1]["end"]})
+        k += n
+    return out

@@ -63,7 +63,15 @@ Kısa, konuşma diline yakın cümleler; klişe yapay zekâ kalıpları, sesteş
 belirsizlikleri (kar/kâr), zor ünsüz kümeleri ve gereksiz yabancı terimler yok.
 Rakamlar konuşulduğu gibi ama rakamla yazılır ("44,6 milyar dolar").
 
-**Uygulama:** `src/script_writer.py` (`NARRATION_STYLE_RULES`).
+Seslendirmeye giden metinde ise tüm rakamlar Türkçe yazıyla gönderilir ("11" → "on bir",
+"2001'de" → "iki bin birde"); TTS rakamları yanlış okuyamaz. Ekran kartları ve altyazı
+rakamla kalır (kelime zamanları orijinal kelimelere geri eşlenir). Her seslendirmeden sonra
+ses yerel konuşma tanımayla yazıya dökülür; söylenen rakamlar script'le, ekran kartlarındaki
+rakamlar seslendirmeyle eşleşmezse QA başarısız olur. (word_timings.json gönderilen metni
+yansıtır, sesi değil; bu kontrol için kullanılamaz.)
+
+**Uygulama:** `src/script_writer.py` (`NARRATION_STYLE_RULES`), `src/tr_numbers.py`,
+`src/tts.py` (`spoken_form` + `_regroup`), `src/speech_check.py`, `agents/critic.py` (`measure_dir`).
 
 ## 4. Güçlü hook, hızlı tempo, merak uyandıran kapanış
 

@@ -24,5 +24,9 @@
     "search": ""
   },
   "publish_dir": "yayina-hazir",
-  "_butce": "Sert sınırlar: gemini_budget_usd_per_week bu ISO haftasındaki tüm çalıştırmaların Gemini + Google Search maliyetidir; her istekten önce kontrol edilir (harcanan + gemini_reserve_usd_per_request > sınır ise istek gönderilmez). --approve sınırı aşamaz; yalnızca buradaki değer değiştirilerek devam edilir."
+  "_butce": "Sert sınırlar: gemini_budget_usd_per_week bu ISO haftasındaki tüm çalıştırmaların Gemini + Google Search maliyetidir; her istekten önce kontrol edilir (harcanan + gemini_reserve_usd_per_request > sınır ise istek gönderilmez). --approve sınırı aşamaz; yalnızca buradaki değer değiştirilerek devam edilir.",
+  "speech_check": {
+    "_aciklama": "Seslendirmedeki rakamlar yerel konuşma tanımayla (faster-whisper) script ve ekranla karşılaştırılır; model: tiny/base/small/medium (büyüdükçe daha isabetli ve yavaş).",
+    "model": "medium"
+  }
 }

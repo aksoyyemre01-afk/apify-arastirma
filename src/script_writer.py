@@ -20,6 +20,7 @@ from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
 
+from . import tr_numbers
 from .schemas import LongScript, SceneLayout, ShortScript
 
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
@@ -316,25 +317,12 @@ MYSTERY_BRAND_DEADLINE = 4.5
 TARGET_MIN_WORDS = 60   # ~31 sn
 TARGET_MAX_WORDS = 85   # ~44 sn
 
-_ONES = ("", "bir", "iki", "üç", "dört", "beş", "altı", "yedi", "sekiz", "dokuz")
-_TENS = ("", "on", "yirmi", "otuz", "kırk", "elli", "altmış", "yetmiş", "seksen", "doksan")
 _SENTENCE_END = (".", "?", "!", ":")
 
 
 def _number_words(n: int) -> str:
     """Tam sayının Türkçe okunuşu (boşluksuz): 63 -> 'altmışüç', 1000 -> 'bin'."""
-    def below_1000(k: int) -> str:
-        h, r = divmod(k, 100)
-        return (("" if h == 1 else _ONES[h]) + "yüz" if h else "") + _TENS[r // 10] + _ONES[r % 10]
-
-    if n == 0:
-        return "sıfır"
-    out = ""
-    for scale, name in ((10**9, "milyar"), (10**6, "milyon"), (1000, "bin")):
-        q, n = divmod(n, scale)
-        if q:
-            out += ("" if (q == 1 and name == "bin") else below_1000(q)) + name
-    return out + below_1000(n)
+    return tr_numbers.number_words(n).replace(" ", "")
 
 
 def _spoken_chars(word: str) -> int:

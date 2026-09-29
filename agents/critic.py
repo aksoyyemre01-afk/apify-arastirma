@@ -24,7 +24,7 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 from src import proc
-from src import script_writer
+from src import script_writer, speech_check
 from src.scene_planner import _find_spoken, measure_lufs
 
 from . import scriptwriter
@@ -176,6 +176,11 @@ def measure_dir(d: Path, script) -> list[dict]:
           f"{v.get('codec_name')}/{v.get('pix_fmt')}, {a.get('codec_name')} {a.get('sample_rate')} Hz {a.get('channels')} kanal",
           "kod")
     check("Altyazı var", len(props.get("captions", [])) > 0, f"{len(props.get('captions', []))} sayfa", "kod")
+    # Söylenen rakamlar: word_timings gönderilen metni yansıtır, sesi değil; bu yüzden ses yerel
+    # konuşma tanımayla yazıya dökülüp script ve ekran kartlarıyla karşılaştırılır.
+    sc = speech_check.check_dir(d, CONFIG.get("speech_check", {}).get("model", "medium"))
+    check("Söylenen rakamlar script ile aynı (konuşma tanıma)", *sc["spoken"], "yonetmen")
+    check("Ekrandaki rakamlar seslendirmede geçiyor", *sc["screen"], "senarist")
     return checks
 
 
