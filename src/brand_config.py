@@ -37,7 +37,8 @@ _DEFAULTS = {
         "next_part_template": "",
         "last_part_template": "",
     },
-    "audio": {"music_below_voice_db": 15, "whoosh_below_voice_db": 12, "impact_below_voice_db": 6},
+    "audio": {"music_below_voice_db": 15, "music_duck_db": 8, "music_fade_out_sec": 2.5,
+              "whoosh_below_voice_db": 12, "impact_below_voice_db": 6},
 }
 
 

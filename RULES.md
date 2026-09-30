@@ -27,7 +27,20 @@ olmak zorundadır; "yeni rakip", "diğerleri" gibi genel ifadeler yasaktır. Bir
 geçersizse sahne geçerli tarafın rakam/logo kartına, ikisi de geçersizse alıntı
 kartına dönüşür.
 
-**Uygulama:** `src/schemas.py` (`Scene`), `src/script_writer.py` (`SCENE_RULES`),
+**Ekrandaki her yazı söylenenden gelir.** Her metin, etiket, rakam ve büyük gösterilen marka
+(logo kartı, karşılaştırma tarafı), o sahne ekrandayken seslendirmede gerçekten söylenen
+kelimelerden gelir; söylenmeyen bir isim ya da ifade (script'in özet/yorum alanları dahil)
+ekrana çıkmaz. Kelime ve isimler, sahne sırasında söylenmekte olan cümlede geçmelidir;
+rakam ve yıllar sıkı zamanlıdır (sahne aralığı ±0,25 sn içinde söylenmelidir - rakam kartı
+rakam söylenmeden önce görünmez). Logo çipleri kalıcı bağlam rozetidir: yalnızca videoda
+söylenen markalar çip olabilir. Render öncesi söylenmeyen yan alanlar (etiket, grafik
+etiketleri, karşılaştırma değeri) kaldırılır; ana içerik söylenmiyorsa sahne, o anda
+söylenenden üretilen bir tipe çevrilir (yıl → zaman çizelgesi, rakam → rakam kartı,
+marka → logo kartı, aksi halde söylenen kelimelerin alıntısı). Eleştirmen aynı kuralı
+word_timings'e göre ölçer; ihlal varsa video geçmez.
+
+**Uygulama:** `src/screen_rules.py` (`enforce`, `violations`), `src/scene_planner.py`
+(`build_props`), `agents/critic.py` (`measure_dir`), `src/schemas.py` (`Scene`), `src/script_writer.py` (`SCENE_RULES`),
 `src/scene_planner.py` (`_align_scene_starts` sahneyi kelime zamanlamalarına
 hizalar; `_validate_comparisons`), `src/logos.py` (Wikidata resmi logo özelliği P154; elle konan
 `assets/logos/<marka>.svg|png` önceliklidir; etiket eşleşmesi zorunlu, yanlış
@@ -95,7 +108,10 @@ Script her sahneyi 5-10 kelime (~2-3 sn) tutar. **Hiçbir sahne 3 sn'yi geçmez:
 daha uzun bir sahne parçalara bölünür ve ikinci parça FARKLI bir sahne tipidir
 (rakam kartı → markanın logo kartı, grafik → son değerin rakam kartı, karşılaştırma →
 vurgulanan tarafın logosu, diğerleri → o anda söylenen kelimelerin alıntı kartı).
-1 sn'den kısa sahneler komşusundan süre alır. Her sahnede animasyonlu giriş, sayaç
+1 sn'den kısa sahneler komşusundan süre alır. **Aynı rakam kartı ya da aynı metin (alıntı,
+etiket, yıl, değer) bir videoda en fazla bir kez gösterilir**; bölünen bir sahnenin ikinci
+parçası aynı kartı tekrarlamaz, o anda söylenene uygun farklı bir sahneye dönüşür (metinsiz
+logo kartı bu kurala girmez). Eleştirmen word_timings'e göre ölçer; tekrar varsa video geçmez. Her sahnede animasyonlu giriş, sayaç
 efekti (rakam ve yıllar), çizilen grafikler ve sürekli hareket eden zemin (yavaş zoom
 yapan gradyan, kayan ızgara ve parçacıklar) vardır; ekran hiç durağan kalmaz.
 
@@ -153,16 +169,20 @@ seslendirmenin ölçülen seviyesine göre ayarlanır (sabit kazançta whoosh'la
 birkaç dB altında kalıyordu):
 - efekt: sesin `whoosh_below_voice_db` (12) / `impact_below_voice_db` (6) altında;
   impact ile aynı ana denk gelen whoosh atlanır;
-- müzik: taban seviyesi sesin `music_below_voice_db` (15) altında, ayrıca konuşma
-  olduğu anlarda sidechain ducking ile kısılır; duraklamalarda taban seviyeye döner.
-Son olarak mix -14 LUFS'a (true peak -1,5 dBTP) normalize edilir; ElevenLabs çıktısı
+- müzik: taban seviyesi sesin `music_below_voice_db` (15) altında (müziğin videoda
+  kullanılan bölümü ölçülür); konuşma anlarında kelime zamanlarından hesaplanan sabit
+  `music_duck_db` (8) ek kısma (80 ms iniş, 350 ms çıkış) - müzik konuşma altında da
+  duyulur (kompresörlü ducking ~24 dB kısıp müziği duyulmaz yapıyordu); duraklamalarda
+  taban seviyeye döner, sonda `music_fade_out_sec` (2,5) sn'de söner.
+Son olarak mix -14 LUFS'a normalize edilir (true peak, 4x örneklemede hafif bir
+sınırlayıcıyla -1,5 dBTP'nin altında tutulur); ElevenLabs çıktısı
 ~-24 LUFS geldiği için normalizasyonsuz video neredeyse sessiz duyulur.
 Ölçüm (Enron, çok yüksek masterlanmış -11,5 LUFS test müziğiyle): konuşmalı her 400 ms
 pencerede ses müziğin en az 14,3 dB üstünde (medyan 32 dB); whoosh'lar sesin 9-12 dB,
 impact'ler 3-4 dB altında.
 
 **Uygulama:** `src/scene_planner.py` (`_sfx_gain`, sfx listesi), `remotion/src/Short.tsx`,
-`src/renderer.py` (`add_music`, `music_duck_filter`, `normalize_loudness`),
+`src/renderer.py` (`add_music`, `speech_spans`, `music_duck_filter`, `normalize_loudness`),
 `tools/make_sfx.py`, `assets/audio/README.md`, `config/brand.json` → `audio`.
 
 ## 9. Haftalık plan

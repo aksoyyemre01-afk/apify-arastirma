@@ -24,7 +24,7 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 from src import proc
-from src import script_writer, speech_check
+from src import screen_rules, script_writer, speech_check
 from src.scene_planner import _find_spoken, measure_lufs
 
 from . import scriptwriter
@@ -178,6 +178,12 @@ def measure_dir(d: Path, script) -> list[dict]:
     check("Altyazı var", len(props.get("captions", [])) > 0, f"{len(props.get('captions', []))} sayfa", "kod")
     # Söylenen rakamlar: word_timings gönderilen metni yansıtır, sesi değil; bu yüzden ses yerel
     # konuşma tanımayla yazıya dökülüp script ve ekran kartlarıyla karşılaştırılır.
+    # Kural 1/5 (word_timings'e göre): ekrandaki her yazı o sahnede söyleniyor, hiçbir kart/metin tekrar etmiyor.
+    sv = screen_rules.violations(props, timings)
+    check("Ekrandaki her metin/rakam/logo o sahnede söyleniyor", not sv["unspoken"],
+          "; ".join(sv["unspoken"][:4]) + (f" (+{len(sv['unspoken']) - 4})" if len(sv["unspoken"]) > 4 else "")
+          or "hepsi söyleniyor", "yonetmen")
+    check("Aynı kart/metin en fazla bir kez", not sv["duplicate"], "; ".join(sv["duplicate"][:4]) or "tekrar yok", "yonetmen")
     sc = speech_check.check_dir(d, CONFIG.get("speech_check", {}).get("model", "medium"))
     check("Söylenen rakamlar script ile aynı (konuşma tanıma)", *sc["spoken"], "yonetmen")
     check("Ekrandaki rakamlar seslendirmede geçiyor", *sc["screen"], "senarist")

@@ -18,6 +18,8 @@ böylece çok yüksek masterlanmış bir müzik ya da efekt dosyası da konuşma
 Ayarlar `config/brand.json` → `audio`:
 
 - `music_below_voice_db` (15): müziğin taban seviyesi, seslendirmenin kaç dB altında.
+- `music_duck_db` (8): konuşma anlarında müziğe uygulanan ek kısma (kelime zamanlarından).
+- `music_fade_out_sec` (2,5): videonun sonunda müziğin sönme süresi.
   Ayrıca konuşma olan anlarda sidechain ducking müziği ek olarak kısar; duraklamalarda
   ve outro'da taban seviyeye döner. Müzik render'dan sonra `src/renderer.py` içinde eklenir.
 - `whoosh_below_voice_db` (12) ve `impact_below_voice_db` (6): efektin, seslendirmenin kaç

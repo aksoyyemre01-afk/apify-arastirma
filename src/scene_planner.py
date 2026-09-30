@@ -26,7 +26,7 @@ import subprocess
 from pathlib import Path
 
 from . import proc
-from . import logos
+from . import logos, screen_rules
 from .schemas import Scene
 from .utils import slugify
 
@@ -709,6 +709,16 @@ def build_props(
     segs = _split_long(segs, timings, (script.get("main_brand") or script.get("company") or "").strip())
 
     scene_props = [_scene_props(seg, reg, mystery, reveal_t) for seg in segs]
+    # Kural 1 + 5: ekrandaki her yazı/rakam/büyük logo o sahnede söylenen kelimelerden gelir
+    # ve aynı kart/metin bir kez gösterilir (src/screen_rules.py; Eleştirmen aynı kuralı ölçer).
+    brands = [b for b in dict.fromkeys(
+        [script.get("main_brand", ""), script.get("company", "")]
+        + [x for sc in scenes for x in (sc.get("brand"), sc.get("left_brand"), sc.get("right_brand")) if x]) if b]
+    before = [(sp["type"], screen_rules._fields(sp)) for sp in scene_props]
+    screen_rules.enforce(scene_props, timings, FPS, brands, lambda b: _logo_ref(b, {"start": 0, "end": 0}, reg, "", None))
+    for n, (sp, (t0, f0)) in enumerate(zip(scene_props, before), 1):
+        if (sp["type"], screen_rules._fields(sp)) != (t0, f0):
+            print(f"      [Kural 1/5] sahne {n}: {t0} {f0} -> {sp['type']} {screen_rules._fields(sp)}")
 
     # Kural 8: ses efektleri (dosya varsa). Her efektin kazancı, seslendirmenin ölçülen
     # seviyesine göre ayarlanır (bkz. _sfx_gain) - efekt asla konuşmayı bastırmaz.
