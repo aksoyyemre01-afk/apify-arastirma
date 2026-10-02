@@ -92,6 +92,45 @@ def render(video_dir: Path, part_info: dict | None = None, offline_logos: bool =
     return out
 
 
+def _remotion(composition: str, out: Path, props_path: Path, public_dir: Path, still: bool = False) -> None:
+    cli = REMOTION_DIR / "node_modules" / "@remotion" / "cli" / "remotion-cli.js"
+    cmd = [_find_node(), str(cli), "still" if still else "render", "src/index.ts", composition, str(out.resolve()),
+           f"--props={props_path.resolve()}", f"--public-dir={public_dir.resolve()}", "--log=warn"]
+    if still:
+        cmd.append("--frame=30")  # giriş animasyonları bitmiş kare
+    result = proc.run(cmd, cwd=REMOTION_DIR, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if result.returncode != 0 or not out.exists():
+        raise RenderError(f"Remotion {composition} başarısız:\n{result.stdout[-3000:]}\n{result.stderr[-3000:]}")
+
+
+def render_long(video_dir: Path, props: dict, files: dict[str, Path], audio: Path, timings: list[dict]) -> Path:
+    """Uzun video (1920x1080, 'Long' kompozisyonu): render + müzik (8 dB kelime zamanlı) + -14 LUFS."""
+    work = video_dir / "assets"
+    public_dir = work / "public"
+    scene_planner.write_public_dir(files, public_dir)
+    props_path = work / "props.json"
+    props_path.write_text(json.dumps(props, ensure_ascii=False, indent=1), encoding="utf-8")
+    (video_dir / "captions.srt").write_text(subtitles.build_cumulative_srt(timings), encoding="utf-8")
+    out = video_dir / "video.mp4"
+    print(f"      Remotion (Long) render başlıyor ({props['durationInFrames']} kare)...")
+    _remotion("Long", out, props_path, public_dir)
+    add_music(out, audio, brand_config.load().get("audio", {}), timings)
+    normalize_loudness(out)
+    return out
+
+
+def render_thumbnail(video_dir: Path, props: dict, files: dict[str, Path]) -> Path:
+    """1280x720 küçük resim (tek kare, 'Thumbnail' kompozisyonu)."""
+    work = video_dir / "assets"
+    public_dir = work / "thumb_public"
+    scene_planner.write_public_dir(files, public_dir)
+    props_path = work / "thumbnail.json"
+    props_path.write_text(json.dumps(props, ensure_ascii=False, indent=1), encoding="utf-8")
+    out = video_dir / "thumbnail.png"
+    _remotion("Thumbnail", out, props_path, public_dir, still=True)
+    return out
+
+
 # ---------------------------------------------------------------------------- müzik
 # Kural 8: müzik seslendirmeyi asla bastırmaz, ama konuşma sırasında da duyulur. İki katman:
 # 1) Taban seviye: müziğin videoda KULLANILAN bölümü ölçülür ve seslendirmenin

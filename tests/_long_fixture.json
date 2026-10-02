@@ -1,0 +1,154 @@
+{
+ "title": "Test",
+ "main_brand": "Test",
+ "hook": {
+  "heading": "",
+  "narration": "Açılış cümlesi.",
+  "scenes": [
+   {
+    "narration": "Açılış cümlesi.",
+    "scene_type": "quote",
+    "brand": "",
+    "value": "",
+    "unit": "",
+    "label": "",
+    "left_brand": "",
+    "right_brand": "",
+    "left_value": "",
+    "right_value": "",
+    "highlight_side": "none",
+    "year": "",
+    "direction": "none",
+    "points": [],
+    "point_labels": [],
+    "end_value": "",
+    "text": "",
+    "highlight": [],
+    "mood": "neutral",
+    "reveal": false
+   }
+  ]
+ },
+ "chapters": [
+  {
+   "heading": "Bölüm 1",
+   "narration": "Bölüm 1 metni.",
+   "scenes": [
+    {
+     "narration": "Bölüm 1 metni.",
+     "scene_type": "quote",
+     "brand": "",
+     "value": "",
+     "unit": "",
+     "label": "",
+     "left_brand": "",
+     "right_brand": "",
+     "left_value": "",
+     "right_value": "",
+     "highlight_side": "none",
+     "year": "",
+     "direction": "none",
+     "points": [],
+     "point_labels": [],
+     "end_value": "",
+     "text": "",
+     "highlight": [],
+     "mood": "neutral",
+     "reveal": false
+    }
+   ]
+  },
+  {
+   "heading": "Bölüm 2",
+   "narration": "Bölüm 2 metni.",
+   "scenes": [
+    {
+     "narration": "Bölüm 2 metni.",
+     "scene_type": "quote",
+     "brand": "",
+     "value": "",
+     "unit": "",
+     "label": "",
+     "left_brand": "",
+     "right_brand": "",
+     "left_value": "",
+     "right_value": "",
+     "highlight_side": "none",
+     "year": "",
+     "direction": "none",
+     "points": [],
+     "point_labels": [],
+     "end_value": "",
+     "text": "",
+     "highlight": [],
+     "mood": "neutral",
+     "reveal": false
+    }
+   ]
+  },
+  {
+   "heading": "Bölüm 3",
+   "narration": "Bölüm 3 metni.",
+   "scenes": [
+    {
+     "narration": "Bölüm 3 metni.",
+     "scene_type": "quote",
+     "brand": "",
+     "value": "",
+     "unit": "",
+     "label": "",
+     "left_brand": "",
+     "right_brand": "",
+     "left_value": "",
+     "right_value": "",
+     "highlight_side": "none",
+     "year": "",
+     "direction": "none",
+     "points": [],
+     "point_labels": [],
+     "end_value": "",
+     "text": "",
+     "highlight": [],
+     "mood": "neutral",
+     "reveal": false
+    }
+   ]
+  }
+ ],
+ "closing": {
+  "heading": "",
+  "narration": "Kapanış.",
+  "scenes": [
+   {
+    "narration": "Kapanış.",
+    "scene_type": "quote",
+    "brand": "",
+    "value": "",
+    "unit": "",
+    "label": "",
+    "left_brand": "",
+    "right_brand": "",
+    "left_value": "",
+    "right_value": "",
+    "highlight_side": "none",
+    "year": "",
+    "direction": "none",
+    "points": [],
+    "point_labels": [],
+    "end_value": "",
+    "text": "",
+    "highlight": [],
+    "mood": "neutral",
+    "reveal": false
+   }
+  ]
+ },
+ "cta": "Takip edin",
+ "description": "Test",
+ "tags": [
+  "test"
+ ],
+ "thumbnail_value": "",
+ "thumbnail_unit": "",
+ "thumbnail_headline": ""
+}

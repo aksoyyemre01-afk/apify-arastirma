@@ -154,3 +154,50 @@ class LongScript(BaseModel):
     @property
     def full_narration(self) -> str:
         return "\n\n".join(f"{c.heading}\n{c.narration}" for c in self.chapters)
+
+
+# ---------------------------------------------------------------------------- uzun video (16:9)
+LongSceneType = Literal["logo_intro", "big_number", "comparison", "timeline", "chart", "quote", "photo"]
+
+
+class LongScene(Scene):
+    scene_type: LongSceneType = Field(
+        description="Short sahne tiplerine ek olarak 'photo': cümlede adı geçen gerçek bir kişinin/kurumun/"
+                    "yerin arşiv fotoğrafı; konu adı `brand` alanına yazılır (fotoğraf o ad söylenirken görünür).")
+
+
+class LongSection(BaseModel):
+    heading: str = Field(default="", description="Bölüm başlığı (seslendirmede okunur ve bölüm kartında görünür); "
+                                                  "hook ve kapanışta boş.")
+    narration: str = Field(description="Bu bölümün seslendirme metni (başlık hariç)")
+    scenes: list[LongScene] = Field(description="Bu bölümün cümleleri ve her cümlenin sahnesi; narration'ların "
+                                                "birleşimi bölüm metnidir.")
+
+
+class LongVideoScript(BaseModel):
+    title: str = Field(description="YouTube başlığı (en fazla 90 karakter)")
+    main_brand: str = Field(description="Videonun ana konusu olan marka/şirket")
+    hook: LongSection = Field(description="20-30 saniyelik açılış (heading boş)")
+    chapters: list[LongSection] = Field(description="3-4 bölüm, kronolojik; her biri başlıklı")
+    closing: LongSection = Field(description="Kapanış: ders ve izleyiciye soru (heading boş)")
+    cta: str = Field(description="Kapanış kartındaki kısa çağrı (en fazla 8 kelime)")
+    description: str = Field(description="YouTube açıklamasının giriş paragrafı (bölümler ve atıflar otomatik eklenir)")
+    tags: list[str] = Field(description="10-15 YouTube etiketi")
+    thumbnail_value: str = Field(default="", description="Küçük resimdeki büyük rakam (doğrulanmış olgulardan), yoksa boş")
+    thumbnail_unit: str = Field(default="", description="Rakamın birimi (ör. 'MİLYAR $'), yoksa boş")
+    thumbnail_headline: str = Field(default="", description="Küçük resimde en fazla 5 kelimelik çarpıcı başlık")
+
+    def sections(self) -> list[tuple[str, LongSection]]:
+        return [("hook", self.hook)] + [(f"bolum-{i}", c) for i, c in enumerate(self.chapters, 1)] + [("kapanis", self.closing)]
+
+    @property
+    def narration_full(self) -> str:
+        return " ".join(section_text(s) for _, s in self.sections())
+
+
+def section_text(s: "LongSection") -> str:
+    """Bölümün seslendirilen metni: başlık (varsa) + metin."""
+    head = s.heading.strip()
+    if head and not head.endswith((".", "!", "?", ":")):
+        head += "."
+    return f"{head} {s.narration}".strip() if head else s.narration.strip()

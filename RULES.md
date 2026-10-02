@@ -188,11 +188,11 @@ impact'ler 3-4 dB altında.
 ## 9. Haftalık plan
 
 Bir konu 3 short'a bölünür (Pazartesi: giriş/kuruluş, Çarşamba: zirve/kritik
-hata, Cuma: çöküş/sonuç); hafta sonu bu üçünü sentezleyen uzun video üretilir.
+hata, Cuma: çöküş/sonuç). İki haftada bir (`config/pipeline.json` → `long.every_n_weeks`)
+son iki haftanın konularından birinin tam hikâyesi uzun video olarak üretilir (kural 11).
 Outro'da bölüm bilgisi (`config/brand.json` → `outro.next_part_template`) gösterilir.
 
-**Uygulama:** `run.py --mode weekly`, `src/script_writer.py` (`WEEKLY_PARTS`).
-Uzun videonun şema ve script'i sahneli üretilir; 16:9 render'ı ikinci aşamadadır.
+**Uygulama:** `pipeline.py --week` / `--long`, `agents/researcher.py`, `src/script_writer.py` (`WEEKLY_PARTS`).
 
 ## 10. İç notlar asla videoda görünmez
 
@@ -201,6 +201,36 @@ render öncesi süzülür: köşeli parantez ya da "görsel/sahne/prompt/animasy
 kamera" gibi kelimeler içeren metin ekrana çıkmaz, uzun metinler kısaltılır.
 
 **Uygulama:** `src/scene_planner.py` (`_clean`, `_BANNED`).
+
+## 11. Uzun video (1920x1080, 5-6 dk)
+
+Yukarıdaki kurallar uzun videoda **aynen** geçerlidir (ekran metni söylenenle uyuşur, tekrar yok,
+rakamlar seslendirmede Türkçe yazıyla, müzik 8 dB kelime zamanlı, -14 LUFS, altyazı). Yalnızca
+formata özgü şu değerler farklıdır:
+
+- **Sahne süresi:** en uzun sahne 8 sn, fotoğrafta 10 sn (short'taki 3 sn yerine). Uzun sahne
+  bölünür; ikinci parça o anda söylenenden üretilen farklı bir karttır.
+- **Ekran 4 sn'den fazla sabit kalmaz:** 4 sn'den uzun sahnelerde her ~3,5 sn'de bir yeni öğe
+  (o anda söylenen bir kelime/rakamın vurgusu) ekrana girer.
+- **Çeşitlilik:** aynı sahne tipi en fazla 60 sn kesintisiz sürer; her 90 sn'lik aralıkta en az 2
+  farklı tip vardır.
+- **Fotoğraf:** Wikimedia Commons'tan, yalnızca serbest lisanslı (CC0, kamu malı, CC BY, CC BY-SA);
+  kişi/kurumun Wikidata resmi görseli (yanlış kişi gelmez). Fotoğraf o ad söylenirken görünür.
+  **Yavaş zoom yalnızca üzerinde yazı olmayan fotoğraf katmanında serbesttir**; yazılar sabittir.
+  Eser adı, yazar, lisans ve link açıklamaya eklenir.
+- **Yapı:** hook (20-30 sn), 3-4 bölüm (her biri seslendirmede okunan başlığıyla bölüm kartı),
+  kapanış. YouTube bölüm zaman damgaları gerçek ses zamanlarından (ilki 0:00, her biri >= 10 sn).
+- **Uzunluk:** seslendirme en fazla 4.800 karakter (okunuş metni); aşarsa tek bir kısaltma isteği.
+- **Küçük resim:** 1280x720; doğrulanmış olgulardan büyük rakam ya da en fazla 5 kelimelik başlık
+  + marka logosu.
+- **QA:** kod ölçümleri her zaman; görsel QA varsayılan 1 tur (otomatik revizyon döngüsü yok,
+  öneriler final onayında sunulur).
+- **Bütçe:** ElevenLabs aylık ve Gemini haftalık sınırları short'larla ortaktır; önce short payı
+  ayrılır, uzun video kalan bütçeye tahmin + %10 sığmıyorsa ertelenir. Onayla aşılamaz.
+
+**Uygulama:** `agents/long_video.py`, `agents/long_flow.py`, `src/long_planner.py`, `src/commons.py`,
+`remotion/src/Short.tsx` (`Long`), `remotion/src/scenes.tsx` (`Photo`, `Chapter`, `Accents`),
+`remotion/src/Thumbnail.tsx`, `tests/test_long_limits.py`.
 
 ---
 

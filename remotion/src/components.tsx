@@ -1,6 +1,6 @@
 import React from 'react';
 import {AbsoluteFill, Easing, Img, interpolate, random, staticFile, useCurrentFrame} from 'remotion';
-import {BODY, HEADING, LAYOUT, formatNumber, parseNumber, useTheme} from './theme';
+import {BODY, HEADING, formatNumber, parseNumber, sz, useLayout, useTheme} from './theme';
 import {LogoRef} from './types';
 
 const clamp = {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'} as const;
@@ -41,17 +41,21 @@ const TintLayer: React.FC<{tint: Tint}> = ({tint}) => (
   </>
 );
 
-const PARTICLES = new Array(18).fill(0).map((_, i) => ({
-  x: Math.round(random(`px${i}`) * 1080),
-  y0: random(`py${i}`) * 1920,
-  speed: 0.4 + random(`ps${i}`) * 1.2,
-  size: Math.round(4 + random(`pz${i}`) * 8),
-  opacity: 0.12 + random(`po${i}`) * 0.2,
-}));
+// Parçacıklar yerleşimin boyutuna göre dağılır (dikeyde 1080x1920 - eski değerlerle aynı).
+const particles = (w: number, h: number) =>
+  new Array(18).fill(0).map((_, i) => ({
+    x: Math.round(random(`px${i}`) * w),
+    y0: random(`py${i}`) * h,
+    speed: 0.4 + random(`ps${i}`) * 1.2,
+    size: Math.round(4 + random(`pz${i}`) * 8),
+    opacity: 0.12 + random(`po${i}`) * 0.2,
+  }));
 
 export const Background: React.FC<{tint?: Tint | null; prevTint?: Tint | null}> = ({tint, prevTint}) => {
   const frame = useCurrentFrame();
   const {palette} = useTheme();
+  const L = useLayout();
+  const PARTICLES = particles(L.width, L.height);
   const gx = 50 + Math.sin(frame / 90) * 25;
   const gy = 35 + Math.cos(frame / 110) * 15;
   // Tek zoom katmanı: yalnızca yumuşak gradyan ve ton (ince çizgi/metin yok, titremez).
@@ -88,7 +92,7 @@ export const Background: React.FC<{tint?: Tint | null; prevTint?: Tint | null}> 
             borderRadius: p.size,
             background: palette.accent,
             opacity: p.opacity,
-            transform: `translateY(${px((p.y0 - frame * p.speed + 1920 * 4) % 1920)}px)`,
+            transform: `translateY(${px((p.y0 - frame * p.speed + L.height * 4) % L.height)}px)`,
             ...MOVING,
           }}
         />
@@ -109,6 +113,7 @@ export const SceneFrame: React.FC<{
   children: React.ReactNode;
 }> = ({durationInFrames, variant, chips = [], children}) => {
   const frame = useCurrentFrame();
+  const LAYOUT = useLayout();
   const enter = enterProgress(frame, 0, 12);
   const exit = interpolate(frame, [durationInFrames - 4, durationInFrames], [1, 0], clamp);
   const opacity = Math.min(variant === 0 ? interpolate(frame, [0, 6], [0, 1], clamp) : 1, exit);
@@ -235,6 +240,7 @@ export const LogoCard: React.FC<{
 // Sabit çip bölgesinde (LAYOUT.chipsTop..+chipsHeight) dikeyde ortalanır; rozet
 // bölgesiyle asla çakışmaz.
 export const Chips: React.FC<{chips: LogoRef[]}> = ({chips}) => {
+  const LAYOUT = useLayout();
   if (!chips.length) return null;
   const h = px(LAYOUT.chipsHeight * 0.9);
   return (
@@ -248,7 +254,7 @@ export const Chips: React.FC<{chips: LogoRef[]}> = ({chips}) => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 40,
+        gap: sz(LAYOUT, 40),
       }}
     >
       {chips.map((c, i) => (
@@ -262,8 +268,10 @@ export const Chips: React.FC<{chips: LogoRef[]}> = ({chips}) => {
 export const Label: React.FC<{text: string; delay?: number; size?: number; top: number}> = ({text, delay = 8, size = 58, top}) => {
   const frame = useCurrentFrame();
   const {palette} = useTheme();
+  const LAYOUT = useLayout();
   if (!text) return null;
   const s = enterProgress(frame, delay, 12);
+  size = sz(LAYOUT, size);
   return (
     <div style={{position: 'absolute', top, left: LAYOUT.sidePadding, right: LAYOUT.sidePadding, display: 'flex', justifyContent: 'center'}}>
       <div

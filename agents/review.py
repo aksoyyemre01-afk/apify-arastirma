@@ -212,6 +212,8 @@ def _failure_report(ctx: RunContext) -> list[str]:
 
 
 def write(ctx: RunContext) -> Path:
+    if ctx.state.get("kind") == "long":
+        return write_long(ctx)
     lines = [f"# Haftalık onay — {ctx.dir.name}", "", STAGE_TEXT.get(ctx.stage, ctx.stage), ""]
     lines += _commands(ctx) + [""]
     if ctx.state.get("error"):
@@ -239,6 +241,123 @@ def write(ctx: RunContext) -> Path:
     lines += ["## Kullanım ve tahmini maliyet (bu çalıştırma)", "", ctx.cost_report(), "",
               "## Kalan bakiye / kredi", "", limits.balance_report(), "",
               "_Ayrıntılı kararlar ve revizyon geçmişi: [log.md](log.md)._", ""]
+    path = ctx.dir / "review.md"
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
+# ---------------------------------------------------------------------------- uzun video
+
+LONG_STAGE_TEXT = {
+    "long_estimate": "⏸ **ONAY A — tahmin.** Henüz hiçbir API isteği yapılmadı. Onaylarsan script yazılır ve yalnızca yeni iddialar doğrulanır (Gemini).",
+    "long_voice_review": "⏸ **ONAY B — ses.** Script hazır ve doğrulandı. Onaylarsan bölüm bölüm ses üretilir (ElevenLabs), video render edilir.",
+    "long_producing": "⏳ Ses + render + QA sürüyor (arka planda).",
+    "long_final": "⏸ **ONAY C — final.** Video, küçük resim ve açıklama hazır.",
+    "long_published": "✅ Yayına hazır klasörüne kopyalandı.",
+    "long_postponed": "⛔ **ERTELENDİ — bütçe/kredi yetmiyor.** Onayla aşılamaz; koşullar sağlanınca (yeni hafta/kredi dönemi ya da config) `--approve` yeniden kontrol eder.",
+    "long_error": "❌ Hata (ayrıntı log.md'de). `--approve` kaldığı yerden yeniden dener.",
+}
+
+
+def _long_commands(ctx: RunContext) -> list[str]:
+    run = ctx.dir.name
+    if ctx.state.get("dry_run"):
+        return ["## Karar", "", "_Bu bir dry-run: gerçek Gemini/ElevenLabs isteği yapılmadı (sahte istemci). Onay verilmez._"]
+    st = ctx.stage
+    lines = ["## Karar", ""]
+    if st in ("long_estimate", "long_voice_review", "long_final", "long_postponed", "long_error"):
+        lines.append(f"- Onayla: `python pipeline.py --approve --run {run}`")
+    if st == "long_voice_review":
+        lines.append(f"- Script'i gerekçeyle yeniden yazdır: `python pipeline.py --reject \"gerekçe\" --run {run}`")
+    return lines
+
+
+def _long_budget(ctx: RunContext) -> list[str]:
+    est, lim = ctx.state.get("estimate", {}), ctx.state.get("limit_check", {})
+    if not est:
+        return []
+    margin = f"%{int(round((est['chars_with_margin'] / max(est['chars'], 1) - 1) * 100))}"
+    lines = ["## Tahmini maliyet (API'siz, yerel)", "",
+             f"_Kaynak: {'yazılmış script' if est.get('based_on_script') else 'hedef uzunluk'}; Gemini istek maliyetleri "
+             f"{est.get('history_n', 0)} geçmiş isteğin ortalamasından._", "",
+             "| Kalem | Tahmin |", "|---|---|"]
+    lines += [f"| Gemini — {k} | ${v:.3f} |" for k, v in est["gemini_items"].items()]
+    lines += [f"| **Gemini toplam** | **${est['gemini_usd']:.2f}** ({margin} payla ${est['gemini_with_margin']:.2f}) |",
+              f"| **ElevenLabs** | **{est['chars']:,} karakter** ({margin} payla {est['chars_with_margin']:,}) |", ""]
+    if lim:
+        el = lim.get("el") or {}
+        rows = [f"| Gemini bu hafta harcanan / sınır | ${lim['gemini_spent']:.2f} / ${lim['gemini_limit']:.2f} |",
+                f"| Gemini short payı (bu haftanın short'ları {'bitmedi' if lim['short_pending'] else 'bitti'}) | ${lim['gemini_reserve']:.2f} |"]
+        if el:
+            rows.append(f"| ElevenLabs kalan (sınır {el.get('cap', 0):,}, yenilenme {el.get('reset', '?')}) | {el.get('remaining', 0):,} |")
+        else:
+            rows.append("| ElevenLabs kalan | okunamadı |")
+        rows.append(f"| ElevenLabs short payı (bu hafta {lim['el_current_week']:,} + {lim['el_future_weeks']} hafta x 3 short) | {lim['el_reserve']:,} |")
+        if lim.get("el_available") is not None:
+            rows.append(f"| ElevenLabs uzun videoya kullanılabilir | {lim['el_available']:,} |")
+        rows.append(f"| **Karar** | **{'UYGUN' if lim['ok'] else 'ERTELE'}** |")
+        lines += ["## Bütçe kilitleri (short'lar öncelikli)", "", "| | Değer |", "|---|---|"] + rows + [""]
+        if lim["reasons"]:
+            lines += ["> " + x for x in lim["reasons"]] + [""]
+    return lines
+
+
+def write_long(ctx: RunContext) -> Path:
+    from src import commons, tr_numbers
+    from src.schemas import LongVideoScript, section_text
+
+    from .long_video import SHORT_LINK_TEXT
+
+    st = ctx.state
+    r = st.get("research", {})
+    lines = [f"# Uzun video — {ctx.dir.name}", "", LONG_STAGE_TEXT.get(ctx.stage, ctx.stage), ""]
+    lines += _long_commands(ctx) + [""]
+    if st.get("postponed"):
+        lines += ["## Erteleme nedeni", ""] + [f"- {x}" for x in st["postponed"]["reasons"]] + [""]
+    if st.get("error"):
+        lines += ["## Hata", "", "```", st["error"], "```", ""]
+    lines += [f"**Konu:** {r.get('topic', {}).get('title', '')} — kaynak short run'ı `{st.get('source_run', '')}` "
+              f"({len(r.get('facts', []))} doğrulanmış olgu, {len(r.get('sources', {}))} kaynak yeniden kullanılıyor)", ""]
+    lines += _long_budget(ctx)
+    s = st.get("script")
+    if s:
+        sc = LongVideoScript.model_validate(s)
+        desc = st.get("description") or (sc.description + "\n\n(Bölüm zaman damgaları ve fotoğraf atıfları ses üretiminden sonra eklenir.)")
+        lines += ["## YouTube", "", f"**Başlık:** {sc.title}", "", "**Açıklama:**", "", "```", desc, "```", "",
+                  f"**Etiketler:** {', '.join(sc.tags)}", "",
+                  f"**Küçük resim:** {' '.join(x for x in (sc.thumbnail_value, sc.thumbnail_unit) if x) or '-'} · "
+                  f"\"{sc.thumbnail_headline}\" + {sc.main_brand} logosu", "",
+                  f"**Short açıklamalarına eklenecek:** `{SHORT_LINK_TEXT}`", "",
+                  "## Bölümler", "", "| Bölüm | Başlık | Karakter (okunuş) | Sahne |", "|---|---|---|---|"]
+        for key, sec in sc.sections():
+            lines.append(f"| {key} | {sec.heading or '-'} | {len(tr_numbers.to_spoken(section_text(sec)))} | {len(sec.scenes)} |")
+        lines += [""]
+        v = st.get("verify")
+        if v:
+            lines += ["## Doğrulama (araştırma yeniden kullanıldı)", "",
+                      f"{v.get('reused', 0)} cümle short'larda doğrulanmış olgularla örtüştü (aranmadı); "
+                      f"{v.get('new', 0)} yeni cümle arandı.", ""]
+            if v.get("claims"):
+                icon = {"verified": "✅", "incorrect": "❌", "unverifiable": "⚠️"}
+                lines += ["| Sonuç | İddia | Not |", "|---|---|---|"]
+                lines += [f"| {icon.get(c['verdict'], c['verdict'])} | {c['claim']} | {c.get('correct') or c.get('explanation', '')} |"
+                          for c in v["claims"]] + [""]
+    if st.get("checks"):
+        lines += ["## Video", "", f"- Video: `{st.get('video', '')}`", f"- Küçük resim: `{st.get('thumbnail', '')}`", "",
+                  "| Ölçüm | Değer | |", "|---|---|---|"]
+        lines += [f"| {c['name']} | {c['value']} | {'✅' if c['ok'] else '❌'} |" for c in st["checks"]]
+        qa = st.get("qa")
+        if qa:
+            lines += ["", f"**Görsel QA (1 tur):** {'✅ geçti' if qa['passed'] else '❌ geçmedi'} — ortalama {qa['average']}/5. {qa['summary']}"]
+            lines += [f"- Öneri: {x}" for x in qa.get("improvements", [])]
+        if st.get("credits"):
+            lines += ["", "**Fotoğraf lisansları:**", ""] + [f"- {commons.credit_line(m)}" for m in st["credits"]]
+        lines += [""]
+    if st.get("dry_run_calls") is not None:
+        lines += ["## Dry-run", "", f"Sahte istemciye giden çağrılar ({len(st['dry_run_calls'])}): "
+                  + ", ".join(st["dry_run_calls"]) + ". Gerçek Gemini/ElevenLabs isteği: **0**.", ""]
+    lines += ["## Kullanım (bu çalıştırma)", "", ctx.cost_report(), "", "## Kalan bakiye / kredi", "",
+              limits.balance_report(), "", "_Ayrıntı: [log.md](log.md)._", ""]
     path = ctx.dir / "review.md"
     path.write_text("\n".join(lines), encoding="utf-8")
     return path

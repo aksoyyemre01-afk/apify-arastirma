@@ -41,7 +41,7 @@ if sys.stdout is None or sys.stderr is None:
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-from agents import critic, director, limits, researcher, review, scriptwriter, verifier  # noqa: E402
+from agents import critic, director, limits, long_flow, researcher, review, scriptwriter, verifier  # noqa: E402
 from agents.base import CONFIG, RUNS_DIR, BudgetExceeded, RunContext, attach_usage_hooks, notify  # noqa: E402
 from src import proc
 from src import state as topic_state  # noqa: E402
@@ -99,7 +99,7 @@ def _spawn_worker(ctx: RunContext) -> None:
     else:
         proc = subprocess.Popen(cmd, start_new_session=True, **args)
     ctx.state["worker_pid"] = proc.pid
-    ctx.set_stage("producing")
+    ctx.set_stage("long_producing" if ctx.state.get("kind") == "long" else "producing")
     review.write(ctx)
     print(f"Üretim arka planda başladı (PID {proc.pid}). İlerleme: {ctx.log_path}\n"
           f"Bittiğinde bildirim gelir ve {ctx.dir / 'review.md'} güncellenir.")
@@ -187,6 +187,8 @@ def _plan_for_review(ctx: RunContext, topic_id: str | None = None, keep_topic: b
 
 
 def cmd_approve(ctx: RunContext) -> None:
+    if ctx.state.get("kind") == "long":
+        return long_flow.approve(ctx, _spawn_worker)
     stage = ctx.stage
     if stage == "topic_review":
         ctx.log("insan", "Konu onaylandı.")
@@ -226,6 +228,14 @@ def cmd_approve(ctx: RunContext) -> None:
 
 
 def cmd_reject(ctx: RunContext, reason: str, short: list[int] | None, keep_topic: bool = False) -> None:
+    if ctx.state.get("kind") == "long":
+        if ctx.stage != "long_voice_review":
+            raise SystemExit("Uzun videoda --reject yalnızca ONAY B'de (script) kullanılır.")
+        ctx.state["research"]["brief"] = (ctx.state["research"].get("brief", "") + f"\nEditör geri bildirimi: {reason}").strip()
+        ctx.state.pop("script", None)
+        ctx.log("insan", f"Uzun video script'i reddedildi: {reason}")
+        ctx.set_stage("long_estimate")
+        return long_flow.approve(ctx, _spawn_worker)
     stage = ctx.stage
     if keep_topic and stage != "topic_review":
         raise SystemExit("--keep-topic yalnızca konu onayı aşamasında kullanılır.")
@@ -389,6 +399,10 @@ def publish(ctx: RunContext) -> None:
 
 
 def cmd_status(ctx: RunContext) -> None:
+    if ctx.state.get("kind") == "long":
+        print(f"Çalıştırma: {ctx.dir.name} (uzun video)\nAşama: {ctx.stage}\nOnay dosyası: {ctx.dir / 'review.md'}\n\n"
+              + ctx.cost_report() + "\n\nKalan bakiye / kredi:\n" + limits.balance_report())
+        return
     alive = _pid_alive(ctx.state.get("worker_pid"))
     print(f"Çalıştırma: {ctx.dir.name}\nAşama: {ctx.stage}"
           + (f" (işçi PID {ctx.state.get('worker_pid')}, {'çalışıyor' if alive else 'DURMUŞ - devam için: --approve'})"
@@ -409,6 +423,7 @@ if __name__ == "__main__":
     g.add_argument("--approve", action="store_true", help="Bekleyen aşamayı onayla")
     g.add_argument("--reject", metavar="GEREKCE", help="Bekleyen aşamayı gerekçeyle reddet")
     g.add_argument("--status", action="store_true", help="Durum ve maliyet")
+    g.add_argument("--long", action="store_true", help="Uzun video: tahmin + ONAY A (--run ile kaynak short run'ı)")
     g.add_argument("--continue", dest="cont", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--run", help="Çalıştırma kimliği (ör. 2026-W40); varsayılan en son")
     p.add_argument("--topic", help="--week ile: konu bankasından belirli bir konu id'si")
@@ -416,14 +431,27 @@ if __name__ == "__main__":
                    help="--reject ile: yalnızca bu short(lar) (1-3; birden fazlası virgülle: 2,3)")
     p.add_argument("--brief-file", help="--week ile: bu çalıştırmaya özel editör notu (UTF-8 metin dosyası); "
                                         "plana ve script'lere girer, RULES.md'yi değiştirmez")
+    p.add_argument("--dry-run", action="store_true",
+                   help="--long ile: tüm akışı gerçek API OLMADAN (sahte Gemini/TTS) test et")
     p.add_argument("--keep-topic", action="store_true",
                    help="--reject ile, konu onayında: konuyu koru, planı gerekçeyle yeniden üret")
     a = p.parse_args()
 
     if a.week:
         cmd_week(a.topic, a.run, Path(a.brief_file).read_text(encoding="utf-8-sig") if a.brief_file else None)
+    elif a.long:
+        if a.dry_run:
+            if not a.run:
+                raise SystemExit("--long --dry-run için --run <kaynak short run'ı> gerekli")
+            c = long_flow.run_dry(a.run)
+            print(f"Dry-run tamam: {c.dir / 'review.md'} (aşama {c.stage})")
+        else:
+            c = long_flow.start(a.run, dry_run=False)
+            print(f"ONAY A: {c.dir / 'review.md'}")
+            _finish_report(c)
     elif a.cont:
-        produce(_open(a.run))
+        ctx = _open(a.run)
+        long_flow.produce(ctx) if ctx.state.get("kind") == "long" else produce(ctx)
     elif a.approve:
         cmd_approve(_open(a.run))
     elif a.reject:

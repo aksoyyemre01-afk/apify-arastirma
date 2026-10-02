@@ -14,6 +14,10 @@ const BADGE_HEIGHT = 76;
 const CHIPS_TOP = 168;
 const CHIPS_HEIGHT = 130;
 export const LAYOUT = {
+  width: 1080,
+  height: 1920,
+  // Yazı/öğe boyut çarpanı: dikeyde 1 (short'lar birebir aynı kalır), yatayda küçültülür.
+  scale: 1,
   badgeTop: BADGE_TOP,
   badgeHeight: BADGE_HEIGHT,
   chipsTop: CHIPS_TOP,
@@ -24,10 +28,52 @@ export const LAYOUT = {
   contentTopWithChips: 340,
   contentTop: 170,
   contentBottom: 1200,
+  labelTop: 1060,
+  labelTopLow: 1080,
   captionTop: 1250,
   captionHeight: 260,
+  captionSide: 50,
   sidePadding: 70,
+  chartHeight: 560,
+  outroTop: 300,
+  outroBottom: 1400,
 };
+export type Layout = typeof LAYOUT;
+
+// Yatay (1920x1080) uzun video yerleşimi, yukarıdan aşağı:
+//   rozet 28-84 | logo çipleri 96-186 | sahne içeriği 200-800 | etiket ~720 | altyazı 860-1010
+// Alt ~%7 oynatıcı kontrollerinin altında kalır.
+export const LAYOUT_LANDSCAPE: Layout = {
+  width: 1920,
+  height: 1080,
+  scale: 0.82,
+  badgeTop: 28,
+  badgeHeight: 56,
+  chipsTop: 96,
+  chipsHeight: 90,
+  sceneClipTopWithChips: 96 + 90 + 10,
+  sceneClipTop: 28 + 56 + 10,
+  contentTopWithChips: 200,
+  contentTop: 110,
+  contentBottom: 800,
+  labelTop: 712,
+  labelTopLow: 726,
+  captionTop: 860,
+  captionHeight: 150,
+  captionSide: 160,
+  sidePadding: 160,
+  chartHeight: 380,
+  outroTop: 160,
+  outroBottom: 900,
+};
+
+const LayoutContext = createContext<Layout>(LAYOUT);
+export const LayoutProvider: React.FC<{layout: Layout; children: React.ReactNode}> = ({layout, children}) => (
+  <LayoutContext.Provider value={layout}>{children}</LayoutContext.Provider>
+);
+export const useLayout = (): Layout => useContext(LayoutContext);
+// Boyutu yerleşim ölçeğine göre tam piksele çevirir (dikeyde değer aynen kalır).
+export const sz = (L: Layout, v: number) => Math.round(v * L.scale);
 
 const ThemeContext = createContext<Theme | null>(null);
 

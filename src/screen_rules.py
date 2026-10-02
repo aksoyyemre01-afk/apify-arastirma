@@ -26,6 +26,7 @@ _SCALE_WORDS = ("trilyon", "milyar", "milyon", "bin")
 _TEXT_FIELDS = {  # tip -> (alan, props anahtarı) listesi: ekranda yazı olarak görünenler
     "quote": ["text"], "timeline": ["year", "text"], "big_number": ["value_unit"],
     "comparison": ["leftValue", "rightValue"], "chart": ["pointLabels", "endValue"], "logo_intro": [],
+    "photo": [], "chapter": ["title"],
 }
 
 
@@ -54,7 +55,8 @@ def _fields(sc: dict) -> dict[str, str]:
 def _big_brands(sc: dict) -> dict[str, str]:
     """Büyük gösterilen (gizli olmayan) markalar: logo kartı ve karşılaştırma tarafları."""
     refs = {"logo": sc.get("logo")} if sc["type"] == "logo_intro" else (
-        {"left": sc.get("left"), "right": sc.get("right")} if sc["type"] == "comparison" else {})
+        {"left": sc.get("left"), "right": sc.get("right")} if sc["type"] == "comparison" else (
+            {"photo": sc.get("photo")} if sc["type"] == "photo" else {}))
     return {k: r["name"] for k, r in refs.items() if r and r.get("name") and not r.get("hidden")}
 
 

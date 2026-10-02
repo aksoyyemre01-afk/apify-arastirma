@@ -88,7 +88,8 @@ def _characters_to_words(characters: list[str], starts: list[float], ends: list[
     return words
 
 
-def synthesize_with_timestamps(text: str, output_path: str) -> list[dict] | None:
+def synthesize_with_timestamps(text: str, output_path: str, previous_text: str | None = None,
+                               next_text: str | None = None) -> list[dict] | None:
     """Ses dosyasını üretir; mümkünse ElevenLabs'in karakter bazlı zaman kodlarından
     kelime bazlı zamanlama listesi de döner. Timestamp endpoint'i kullanılamazsa
     (SDK/plan/hesap desteklemiyorsa) sessizce düz `synthesize()`'a düşer ve None döner
@@ -104,10 +105,14 @@ def synthesize_with_timestamps(text: str, output_path: str) -> list[dict] | None
         voice_id = os.environ.get("ELEVENLABS_VOICE_ID") or DEFAULT_VOICE_ID
         model_id = os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2")
 
+        # previous/next_text: uzun videoda bölüm geçişleri doğal tonlansın diye isteğe bağlı bağlam.
+        # Kredi düşüp düşmediği doğrulanmadığı için varsayılan kapalıdır (config long.tts_context).
+        extra = {k: tr_numbers.to_spoken(v) for k, v in (("previous_text", previous_text), ("next_text", next_text)) if v}
         result = client.text_to_speech.convert_with_timestamps(
             voice_id=voice_id,
             model_id=model_id,
             text=spoken,
+            **extra,
         )
 
         audio_bytes = base64.b64decode(result.audio_base_64)

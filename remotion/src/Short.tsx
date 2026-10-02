@@ -2,7 +2,7 @@ import React from 'react';
 import {AbsoluteFill, Audio, Sequence, interpolate, staticFile, useCurrentFrame} from 'remotion';
 import {Background, EASE_IN_OUT, MOVING, Tint, enterProgress, px} from './components';
 import {SceneView} from './scenes';
-import {BODY, HEADING, LAYOUT, ThemeProvider, useTheme} from './theme';
+import {BODY, HEADING, LAYOUT, LAYOUT_LANDSCAPE, Layout, LayoutProvider, ThemeProvider, sz, useLayout, useTheme} from './theme';
 import {CaptionPage, LogoRef, Outro as OutroProps, SceneProps, ShortProps} from './types';
 
 const clamp = {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'} as const;
@@ -13,6 +13,7 @@ const shiftScene = (s: SceneProps, lead: number): SceneProps => {
   const shift = (r: LogoRef | null): LogoRef | null =>
     r && r.revealAt !== null ? {...r, revealAt: r.revealAt + lead} : r;
   const out = {...s, durationInFrames: s.durationInFrames + lead, chips: s.chips.map((c) => shift(c) as LogoRef)};
+  if (out.accents) out.accents = out.accents.map((a) => ({...a, at: a.at + lead}));
   if (out.type === 'logo_intro') out.logo = shift(out.logo);
   if (out.type === 'comparison') {
     out.left = shift(out.left);
@@ -31,6 +32,9 @@ const CAPTION_WORD_GAP = Math.round(CAPTION_SIZE * 0.34) + CAPTION_STROKE;
 const Caption: React.FC<{page: CaptionPage}> = ({page}) => {
   const frame = useCurrentFrame();
   const {palette} = useTheme();
+  const LAYOUT = useLayout();
+  const size = sz(LAYOUT, CAPTION_SIZE);
+  const stroke = sz(LAYOUT, CAPTION_STROKE);
   // Sayfa girişi ölçeksiz: kısa opacity + 20 px yukarı kayma (yazı titremez).
   const pop = enterProgress(frame, 0, 6);
   return (
@@ -39,8 +43,8 @@ const Caption: React.FC<{page: CaptionPage}> = ({page}) => {
         position: 'absolute',
         top: LAYOUT.captionTop,
         height: LAYOUT.captionHeight,
-        left: 50,
-        right: 50,
+        left: LAYOUT.captionSide,
+        right: LAYOUT.captionSide,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -52,7 +56,7 @@ const Caption: React.FC<{page: CaptionPage}> = ({page}) => {
           display: 'flex',
           flexWrap: 'wrap',
           justifyContent: 'center',
-          gap: `0 ${CAPTION_WORD_GAP}px`,
+          gap: `0 ${LAYOUT.scale === 1 ? CAPTION_WORD_GAP : Math.round(size * 0.34) + stroke}px`,
           opacity: pop,
           transform: `translateY(${px((1 - pop) * 20)}px)`,
           ...MOVING,
@@ -66,13 +70,13 @@ const Caption: React.FC<{page: CaptionPage}> = ({page}) => {
               style={{
                 fontFamily: HEADING,
                 fontWeight: 900,
-                fontSize: CAPTION_SIZE,
+                fontSize: size,
                 lineHeight: 1.15,
                 color: active ? palette.accent : palette.text,
-                transform: `translateY(${active ? -6 : 0}px)`,
+                transform: `translateY(${active ? -sz(LAYOUT, 6) : 0}px)`,
                 display: 'inline-block',
                 whiteSpace: 'nowrap',
-                WebkitTextStroke: `${CAPTION_STROKE}px ${palette.background}`,
+                WebkitTextStroke: `${stroke}px ${palette.background}`,
                 paintOrder: 'stroke fill',
                 textShadow: '0 8px 24px rgba(0,0,0,0.55)',
               }}
@@ -91,6 +95,7 @@ const Caption: React.FC<{page: CaptionPage}> = ({page}) => {
 const Badge: React.FC<{text: string; intro: boolean}> = ({text, intro}) => {
   const frame = useCurrentFrame();
   const {palette} = useTheme();
+  const LAYOUT = useLayout();
   if (!text) return null;
   const s = intro ? enterProgress(frame, 0, 14) : 1;
   const sweep = intro ? px(interpolate(frame, [0, 16], [0, 120], {...clamp, easing: EASE_IN_OUT})) : 120;
@@ -115,14 +120,14 @@ const Badge: React.FC<{text: string; intro: boolean}> = ({text, intro}) => {
           overflow: 'hidden',
           fontFamily: HEADING,
           fontWeight: 800,
-          fontSize: 38,
+          fontSize: sz(LAYOUT, 38),
           lineHeight: 1.2,
           letterSpacing: 3,
           textTransform: 'uppercase',
           color: palette.card_text,
           background: palette.accent,
-          padding: '10px 30px',
-          borderRadius: 16,
+          padding: `${sz(LAYOUT, 10)}px ${sz(LAYOUT, 30)}px`,
+          borderRadius: sz(LAYOUT, 16),
           transform: `translateY(${px((1 - s) * -120)}px)`,
           ...MOVING,
         }}
@@ -144,6 +149,7 @@ const Badge: React.FC<{text: string; intro: boolean}> = ({text, intro}) => {
 const Outro: React.FC<{o: OutroProps}> = ({o}) => {
   const frame = useCurrentFrame();
   const {palette} = useTheme();
+  const LAYOUT = useLayout();
   const s = enterProgress(frame, 0, 12);
   const words = o.cta.split(/\s+/).filter(Boolean);
   const button = enterProgress(frame, 12, 10);
@@ -154,20 +160,20 @@ const Outro: React.FC<{o: OutroProps}> = ({o}) => {
       <div
         style={{
           position: 'absolute',
-          top: 300,
-          bottom: 1920 - 1400,
+          top: LAYOUT.outroTop,
+          bottom: LAYOUT.height - LAYOUT.outroBottom,
           left: LAYOUT.sidePadding,
           right: LAYOUT.sidePadding,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 60,
+          gap: sz(LAYOUT, 60),
           textAlign: 'center',
         }}
       >
         {o.seriesName ? (
-          <div lang="tr" style={{fontFamily: HEADING, fontWeight: 800, fontSize: 44, letterSpacing: 4, textTransform: 'uppercase', color: palette.accent, opacity: s, transform: `translateY(${px((1 - s) * 30)}px)`, ...MOVING}}>
+          <div lang="tr" style={{fontFamily: HEADING, fontWeight: 800, fontSize: sz(LAYOUT, 44), letterSpacing: 4, textTransform: 'uppercase', color: palette.accent, opacity: s, transform: `translateY(${px((1 - s) * 30)}px)`, ...MOVING}}>
             {o.seriesName}
           </div>
         ) : null}
@@ -176,7 +182,7 @@ const Outro: React.FC<{o: OutroProps}> = ({o}) => {
             {words.map((w, i) => {
               const ws = enterProgress(frame, 3 + i * 2, 12);
               return (
-                <span key={i} style={{fontFamily: HEADING, fontWeight: 900, fontSize: 88, lineHeight: 1.1, color: palette.text, opacity: ws, transform: `translateY(${px((1 - ws) * 40)}px)`, display: 'inline-block', ...MOVING}}>
+                <span key={i} style={{fontFamily: HEADING, fontWeight: 900, fontSize: sz(LAYOUT, 88), lineHeight: 1.1, color: palette.text, opacity: ws, transform: `translateY(${px((1 - ws) * 40)}px)`, display: 'inline-block', ...MOVING}}>
                   {w}
                 </span>
               );
@@ -184,7 +190,7 @@ const Outro: React.FC<{o: OutroProps}> = ({o}) => {
           </div>
         ) : null}
         {o.partText ? (
-          <div lang="tr" style={{fontFamily: BODY, fontWeight: 700, fontSize: 48, color: palette.muted, opacity: interpolate(frame, [10, 18], [0, 1], clamp)}}>
+          <div lang="tr" style={{fontFamily: BODY, fontWeight: 700, fontSize: sz(LAYOUT, 48), color: palette.muted, opacity: interpolate(frame, [10, 18], [0, 1], clamp)}}>
             {o.partText}
           </div>
         ) : null}
@@ -194,12 +200,12 @@ const Outro: React.FC<{o: OutroProps}> = ({o}) => {
             style={{
               fontFamily: HEADING,
               fontWeight: 900,
-              fontSize: followSize,
+              fontSize: sz(LAYOUT, followSize),
               whiteSpace: 'nowrap',
               color: palette.card_text,
               background: palette.accent,
-              padding: '22px 48px',
-              borderRadius: 80,
+              padding: `${sz(LAYOUT, 22)}px ${sz(LAYOUT, 48)}px`,
+              borderRadius: sz(LAYOUT, 80),
               opacity: button,
               transform: `translateY(${px((1 - button) * 30)}px)`,
               ...MOVING,
@@ -280,8 +286,15 @@ const Inner: React.FC<ShortProps> = (props) => {
   );
 };
 
-export const Short: React.FC<ShortProps> = (props) => (
-  <ThemeProvider theme={props.theme}>
-    <Inner {...props} />
-  </ThemeProvider>
+const withLayout = (layout: Layout): React.FC<ShortProps> => (props) => (
+  <LayoutProvider layout={layout}>
+    <ThemeProvider theme={props.theme}>
+      <Inner {...props} />
+    </ThemeProvider>
+  </LayoutProvider>
 );
+
+// Dikey short (1080x1920) ve yatay uzun video (1920x1080) aynı sahne/altyazı/ses yapısını
+// kullanır; yalnızca yerleşim (bölgeler ve boyut çarpanı) farklıdır.
+export const Short = withLayout(LAYOUT);
+export const Long = withLayout(LAYOUT_LANDSCAPE);

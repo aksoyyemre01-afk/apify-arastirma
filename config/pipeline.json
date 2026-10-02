@@ -28,5 +28,18 @@
   "speech_check": {
     "_aciklama": "Seslendirmedeki rakamlar yerel konuşma tanımayla (faster-whisper) script ve ekranla karşılaştırılır; model: tiny/base/small/medium (büyüdükçe daha isabetli ve yavaş).",
     "model": "medium"
+  },
+  "long": {
+    "_aciklama": "Uzun video (1920x1080). Bütçe: ElevenLabs aylık sınırı ve Gemini haftalık sınırı short larla ORTAK; önce short payı ayrılır, uzun video ancak kullanılabilir >= tahmin x (1 + margin) ise başlar, değilse ertelenir. Onayla aşılamaz.",
+    "every_n_weeks": 2,
+    "lookback_weeks": 2,
+    "max_spoken_chars": 4800,
+    "min_seconds": 300,
+    "max_seconds": 360,
+    "margin": 0.1,
+    "gemini_short_reserve_usd": 1.5,
+    "qa_rounds": 1,
+    "tts_context": false,
+    "section_gap_sec": 0.6
   }
 }

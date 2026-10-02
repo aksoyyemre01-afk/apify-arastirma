@@ -1,13 +1,16 @@
 import React from 'react';
-import {AbsoluteFill, interpolate, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame} from 'remotion';
 import {Counter, EASE_IN_OUT, Label, LogoCard, MOVING, SceneFrame, enterProgress, fitFont, px} from './components';
-import {BODY, HEADING, LAYOUT} from './theme';
+import {BODY, HEADING, Layout, sz, useLayout} from './theme';
 import {useTheme} from './theme';
 import {
+  Accent,
   BigNumberScene,
+  ChapterScene,
   ChartScene,
   ComparisonScene,
   LogoIntroScene,
+  PhotoScene,
   QuoteScene,
   SceneProps,
   TimelineScene,
@@ -17,34 +20,38 @@ import {
 // ve tam piksele yuvarlanmış translate ile, konumlar tam piksel, easing'ler yumuşak.
 
 const clamp = {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'} as const;
-const CONTENT_W = 1080 - LAYOUT.sidePadding * 2;
+const contentW = (L: Layout) => L.width - L.sidePadding * 2;
 
 // Çip varsa sahnenin ana gövdesi çiplerin altından başlar.
-const Body: React.FC<{hasChips: boolean; children: React.ReactNode; gap?: number}> = ({hasChips, children, gap = 44}) => (
-  <div
-    style={{
-      position: 'absolute',
-      top: hasChips ? LAYOUT.contentTopWithChips : LAYOUT.contentTop,
-      bottom: 1920 - LAYOUT.contentBottom,
-      left: LAYOUT.sidePadding,
-      right: LAYOUT.sidePadding,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap,
-    }}
-  >
-    {children}
-  </div>
-);
+const Body: React.FC<{hasChips: boolean; children: React.ReactNode; gap?: number}> = ({hasChips, children, gap = 44}) => {
+  const LAYOUT = useLayout();
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: hasChips ? LAYOUT.contentTopWithChips : LAYOUT.contentTop,
+        bottom: LAYOUT.height - LAYOUT.contentBottom,
+        left: LAYOUT.sidePadding,
+        right: LAYOUT.sidePadding,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: sz(LAYOUT, gap),
+      }}
+    >
+      {children}
+    </div>
+  );
+};
 
 // Giriş: yarı saydamdan tam görünüre ve 40 px aşağıdan yerine (ölçekleme yok).
 const Pop: React.FC<{delay?: number; children: React.ReactNode}> = ({delay = 0, children}) => {
   const frame = useCurrentFrame();
+  const L = useLayout();
   const s = enterProgress(frame, delay, 12);
   return (
-    <div style={{opacity: 0.3 + 0.7 * s, transform: `translateY(${px((1 - s) * 40)}px)`, ...MOVING}}>{children}</div>
+    <div style={{opacity: 0.3 + 0.7 * s, transform: `translateY(${px((1 - s) * sz(L, 40))}px)`, ...MOVING}}>{children}</div>
   );
 };
 
@@ -59,11 +66,13 @@ const StaggerText: React.FC<{
 }> = ({text, size, highlight = [], delay = 0, weight = 800, font = HEADING}) => {
   const frame = useCurrentFrame();
   const {palette} = useTheme();
+  const L = useLayout();
+  size = sz(L, size);
   const norm = (w: string) => w.toLocaleLowerCase('tr').replace(/[^\p{L}\p{N}]/gu, '');
   const hl = new Set(highlight.flatMap((h) => h.split(/\s+/)).map(norm));
   const words = text.split(/\s+/).filter(Boolean);
   return (
-    <div lang="tr" style={{display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: `${px(size * 0.18)}px ${px(size * 0.26)}px`, maxWidth: CONTENT_W}}>
+    <div lang="tr" style={{display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: `${px(size * 0.18)}px ${px(size * 0.26)}px`, maxWidth: contentW(L)}}>
       {words.map((w, i) => {
         const s = enterProgress(frame, delay + i * 3, 12);
         const isHl = hl.has(norm(w));
@@ -80,7 +89,7 @@ const StaggerText: React.FC<{
               padding: isHl ? `0 ${px(size * 0.16)}px` : 0,
               borderRadius: px(size * 0.14),
               background: isHl ? `linear-gradient(90deg, ${palette.accent} ${wipe}%, transparent ${wipe}%)` : 'transparent',
-              transform: `translateY(${px((1 - s) * 40)}px)`,
+              transform: `translateY(${px((1 - s) * sz(L, 40))}px)`,
               opacity: s,
               display: 'inline-block',
               ...MOVING,
@@ -97,18 +106,19 @@ const StaggerText: React.FC<{
 // ---------------------------------------------------------------- logo_intro
 const LogoIntro: React.FC<{s: LogoIntroScene}> = ({s}) => {
   const frame = useCurrentFrame();
+  const L = useLayout();
   const sweep = px(interpolate(frame, [6, 30], [-60, 160], {...clamp, easing: EASE_IN_OUT}));
   return (
     <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
       <Body hasChips={s.chips.length > 0} gap={60}>
         {s.logo ? (
           <div style={{position: 'relative'}}>
-            <LogoCard logo={s.logo} width={800} height={440} />
+            <LogoCard logo={s.logo} width={sz(L, 800)} height={sz(L, 440)} />
             <div
               style={{
                 position: 'absolute',
                 inset: 0,
-                borderRadius: 60,
+                borderRadius: sz(L, 60),
                 background: `linear-gradient(105deg, transparent ${sweep - 20}%, rgba(255,255,255,0.55) ${sweep}%, transparent ${sweep + 20}%)`,
                 mixBlendMode: 'overlay',
                 pointerEvents: 'none',
@@ -117,7 +127,7 @@ const LogoIntro: React.FC<{s: LogoIntroScene}> = ({s}) => {
           </div>
         ) : null}
       </Body>
-      <Label text={s.label} top={1060} size={s.variant > 0 ? 68 : 60} />
+      <Label text={s.label} top={L.labelTop} size={s.variant > 0 ? 68 : 60} />
     </SceneFrame>
   );
 };
@@ -125,8 +135,9 @@ const LogoIntro: React.FC<{s: LogoIntroScene}> = ({s}) => {
 // ---------------------------------------------------------------- big_number
 const BigNumber: React.FC<{s: BigNumberScene}> = ({s}) => {
   const {palette} = useTheme();
-  const numberSize = fitFont(s.value, CONTENT_W, 300, 0.64);
-  const unitSize = fitFont(s.unit, CONTENT_W, 118, 0.7);
+  const L = useLayout();
+  const numberSize = fitFont(s.value, contentW(L), sz(L, 300), 0.64);
+  const unitSize = fitFont(s.unit, contentW(L), sz(L, 118), 0.7);
   return (
     <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
       <Body hasChips={s.chips.length > 0} gap={10}>
@@ -138,7 +149,7 @@ const BigNumber: React.FC<{s: BigNumberScene}> = ({s}) => {
               fontSize: numberSize,
               lineHeight: 1,
               color: palette.text,
-              textShadow: `0 0 60px ${palette.accent}55`,
+              textShadow: `0 0 ${sz(L, 60)}px ${palette.accent}55`,
               fontVariantNumeric: 'tabular-nums',
             }}
           >
@@ -153,7 +164,7 @@ const BigNumber: React.FC<{s: BigNumberScene}> = ({s}) => {
           </Pop>
         ) : null}
       </Body>
-      <Label text={s.label} top={1060} size={s.variant > 0 ? 68 : 58} delay={s.variant > 0 ? 0 : 12} />
+      <Label text={s.label} top={L.labelTop} size={s.variant > 0 ? 68 : 58} delay={s.variant > 0 ? 0 : 12} />
     </SceneFrame>
   );
 };
@@ -162,6 +173,7 @@ const BigNumber: React.FC<{s: BigNumberScene}> = ({s}) => {
 const Comparison: React.FC<{s: ComparisonScene}> = ({s}) => {
   const frame = useCurrentFrame();
   const {palette} = useTheme();
+  const L = useLayout();
   const vs = enterProgress(frame, 8, 10);
   const hlOn = s.variant > 0 || frame > 20;
   const card = (ref: ComparisonScene['left'], value: string, side: 'left' | 'right') => {
@@ -174,15 +186,15 @@ const Comparison: React.FC<{s: ComparisonScene}> = ({s}) => {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: 34,
+          gap: sz(L, 34),
           transform: `translateX(${px((1 - enter) * (side === 'left' ? -500 : 500))}px)`,
           ...MOVING,
         }}
       >
         {ref ? (
-          <LogoCard logo={ref} width={340} height={220} dim={dim} highlight={hlOn && isHl} />
+          <LogoCard logo={ref} width={sz(L, 340)} height={sz(L, 220)} dim={dim} highlight={hlOn && isHl} />
         ) : (
-          <div style={{width: 340, height: 220}} />
+          <div style={{width: sz(L, 340), height: sz(L, 220)}} />
         )}
         {value ? (
           <div
@@ -190,7 +202,7 @@ const Comparison: React.FC<{s: ComparisonScene}> = ({s}) => {
             style={{
               fontFamily: HEADING,
               fontWeight: 900,
-              fontSize: fitFont(value, 340, 60, 0.66),
+              fontSize: fitFont(value, sz(L, 340), sz(L, 60), 0.66),
               color: hlOn && isHl ? palette.accent : palette.text,
               opacity: dim ? 0.5 : 1,
               textAlign: 'center',
@@ -206,20 +218,20 @@ const Comparison: React.FC<{s: ComparisonScene}> = ({s}) => {
     <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
       <Body hasChips={s.chips.length > 0} gap={70}>
         {s.label ? <StaggerText text={s.label} size={62} weight={800} /> : null}
-        <div style={{display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 20, width: 1080}}>
+        <div style={{display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: L.scale === 1 ? 20 : sz(L, 120), width: L.scale === 1 ? 1080 : contentW(L)}}>
           {card(s.left, s.leftValue, 'left')}
           <div
             style={{
               alignSelf: 'flex-start',
-              marginTop: 45,
-              width: 120,
-              height: 120,
-              borderRadius: 120,
+              marginTop: sz(L, 45),
+              width: sz(L, 120),
+              height: sz(L, 120),
+              borderRadius: sz(L, 120),
               background: palette.accent,
               color: palette.card_text,
               fontFamily: HEADING,
               fontWeight: 900,
-              fontSize: 54,
+              fontSize: sz(L, 54),
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -242,6 +254,8 @@ const Comparison: React.FC<{s: ComparisonScene}> = ({s}) => {
 const Timeline: React.FC<{s: TimelineScene}> = ({s}) => {
   const frame = useCurrentFrame();
   const {palette} = useTheme();
+  const L = useLayout();
+  const CONTENT_W = contentW(L);
   const draw = interpolate(frame, [0, 22], [0, 1], {...clamp, easing: EASE_IN_OUT});
   const lineW = px(CONTENT_W * draw);
   // Nabız, noktanın boyutuyla değil etrafındaki halkanın parlaklığıyla verilir.
@@ -255,7 +269,7 @@ const Timeline: React.FC<{s: TimelineScene}> = ({s}) => {
             style={{
               fontFamily: HEADING,
               fontWeight: 900,
-              fontSize: fitFont(s.year, CONTENT_W, 250, 0.66),
+              fontSize: fitFont(s.year, CONTENT_W, sz(L, 250), 0.66),
               color: palette.accent,
               lineHeight: 1,
               fontVariantNumeric: 'tabular-nums',
@@ -288,7 +302,7 @@ const Timeline: React.FC<{s: TimelineScene}> = ({s}) => {
         </div>
         {s.text ? <StaggerText text={s.text} size={s.variant > 0 ? 76 : 68} delay={10} weight={700} font={BODY} /> : null}
       </Body>
-      <Label text={s.label} top={1080} />
+      <Label text={s.label} top={L.labelTopLow} />
     </SceneFrame>
   );
 };
@@ -298,8 +312,10 @@ const Chart: React.FC<{s: ChartScene}> = ({s}) => {
   const frame = useCurrentFrame();
   const {palette} = useTheme();
   const color = s.direction === 'down' ? palette.down : palette.up;
+  const LAYOUT = useLayout();
+  const CONTENT_W = contentW(LAYOUT);
   const W = CONTENT_W;
-  const H = 560;
+  const H = LAYOUT.chartHeight;
   const pad = 40;
   const min = Math.min(...s.points);
   const max = Math.max(...s.points);
@@ -320,13 +336,13 @@ const Chart: React.FC<{s: ChartScene}> = ({s}) => {
   const ring = 0.25 + (Math.sin(frame / 4) + 1) * 0.15;
   const arrow = s.direction === 'down' ? '▼' : '▲';
   const bodyTop = s.chips.length ? LAYOUT.contentTopWithChips : LAYOUT.contentTop;
-  const chartTop = bodyTop + 150;
+  const chartTop = bodyTop + sz(LAYOUT, 150);
   return (
     <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
       <div
         style={{
           position: 'absolute',
-          top: bodyTop + 20,
+          top: bodyTop + sz(LAYOUT, 20),
           left: LAYOUT.sidePadding,
           right: LAYOUT.sidePadding,
           display: 'flex',
@@ -335,9 +351,9 @@ const Chart: React.FC<{s: ChartScene}> = ({s}) => {
           gap: 24,
         }}
       >
-        {s.label ? <span style={{fontSize: 70, color, fontFamily: HEADING, fontWeight: 900}}>{arrow}</span> : null}
+        {s.label ? <span style={{fontSize: sz(LAYOUT, 70), color, fontFamily: HEADING, fontWeight: 900}}>{arrow}</span> : null}
         {s.label ? (
-          <span lang="tr" style={{fontFamily: HEADING, fontWeight: 800, fontSize: fitFont(s.label, CONTENT_W - 120, 62, 0.6), color: palette.text}}>
+          <span lang="tr" style={{fontFamily: HEADING, fontWeight: 800, fontSize: fitFont(s.label, CONTENT_W - 120, sz(LAYOUT, 62), 0.6), color: palette.text}}>
             {s.label}
           </span>
         ) : null}
@@ -373,11 +389,11 @@ const Chart: React.FC<{s: ChartScene}> = ({s}) => {
           <text
             key={i}
             x={pts[i].x}
-            y={H + 58}
+            y={H + sz(LAYOUT, 58)}
             fill={palette.muted}
             fontFamily={BODY}
             fontWeight={700}
-            fontSize={36}
+            fontSize={sz(LAYOUT, 36)}
             textAnchor="middle"
             opacity={progress >= i / (pts.length - 1) - 0.01 ? 1 : 0}
           >
@@ -390,13 +406,13 @@ const Chart: React.FC<{s: ChartScene}> = ({s}) => {
           lang="tr"
           style={{
             position: 'absolute',
-            top: Math.max(chartTop + end.y - 150, bodyTop + 110),
+            top: Math.max(chartTop + end.y - sz(LAYOUT, 150), bodyTop + sz(LAYOUT, 110)),
             right: LAYOUT.sidePadding - 10,
             background: color,
             color: '#FFFFFF',
             fontFamily: HEADING,
             fontWeight: 900,
-            fontSize: fitFont(s.endValue, 560, s.variant > 0 ? 76 : 64, 0.66),
+            fontSize: fitFont(s.endValue, sz(LAYOUT, 560), sz(LAYOUT, s.variant > 0 ? 76 : 64), 0.66),
             padding: '14px 30px',
             borderRadius: 26,
             boxShadow: '0 20px 50px rgba(0,0,0,0.4)',
@@ -415,20 +431,139 @@ const Chart: React.FC<{s: ChartScene}> = ({s}) => {
 // ---------------------------------------------------------------- quote
 const Quote: React.FC<{s: QuoteScene}> = ({s}) => {
   const {palette} = useTheme();
+  const L = useLayout();
   const words = s.text.split(/\s+/).length;
   const size = words <= 4 ? 110 : words <= 7 ? 92 : 80;
   return (
     <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
       <Body hasChips={s.chips.length > 0} gap={30}>
-        <div style={{fontFamily: HEADING, fontWeight: 900, fontSize: 200, lineHeight: 0.6, color: palette.accent, opacity: 0.9, height: 90}}>“</div>
+        <div style={{fontFamily: HEADING, fontWeight: 900, fontSize: sz(L, 200), lineHeight: 0.6, color: palette.accent, opacity: 0.9, height: sz(L, 90)}}>“</div>
         <StaggerText text={s.text} size={size} highlight={s.highlight} delay={s.variant > 0 ? -30 : 0} />
       </Body>
-      <Label text={s.label} top={1080} />
+      <Label text={s.label} top={L.labelTopLow} />
     </SceneFrame>
   );
 };
 
-export const SceneView: React.FC<{scene: SceneProps}> = ({scene}) => {
+// ---------------------------------------------------------------- photo (uzun video)
+// Lisanslı arşiv fotoğrafı. Yavaş zoom YALNIZCA fotoğraf katmanında (üzerinde yazı yok);
+// etiket ve çipler sabit kalır (titreme kuralı). Lisans bilgisi video açıklamasındadır.
+const Photo: React.FC<{s: PhotoScene}> = ({s}) => {
+  const frame = useCurrentFrame();
+  const L = useLayout();
+  const top = s.chips.length ? L.contentTopWithChips : L.contentTop;
+  const zoom = interpolate(frame, [0, s.durationInFrames], [1, 1.08], clamp);
+  const pan = interpolate(frame, [0, s.durationInFrames], [0, -1.5], clamp);
+  return (
+    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
+      <div
+        style={{
+          position: 'absolute',
+          top,
+          bottom: L.height - (s.label ? L.labelTop - sz(L, 24) : L.contentBottom),
+          left: L.sidePadding,
+          right: L.sidePadding,
+          borderRadius: sz(L, 36),
+          overflow: 'hidden',
+          boxShadow: '0 30px 80px rgba(0,0,0,0.45)',
+        }}
+      >
+        {s.photo ? (
+          <Img
+            src={staticFile(s.photo.src)}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: s.photo.focus || '50% 30%',
+              transform: `scale(${zoom.toFixed(4)}) translateX(${pan.toFixed(3)}%)`,
+              ...MOVING,
+            }}
+          />
+        ) : null}
+        <div style={{position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0) 60%, rgba(0,0,0,0.35) 100%)'}} />
+      </div>
+      <Label text={s.label} top={L.labelTop} />
+    </SceneFrame>
+  );
+};
+
+// ---------------------------------------------------------------- chapter (uzun video)
+// Bölüm başlığı kartı: başlık, seslendirmede okunan bölüm başlığıdır (kural 1).
+const Chapter: React.FC<{s: ChapterScene}> = ({s}) => {
+  const frame = useCurrentFrame();
+  const {palette} = useTheme();
+  const L = useLayout();
+  const line = px(interpolate(frame, [0, 20], [0, sz(L, 420)], {...clamp, easing: EASE_IN_OUT}));
+  return (
+    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
+      <Body hasChips={s.chips.length > 0} gap={50}>
+        <div style={{height: sz(L, 12), width: line, background: palette.accent, borderRadius: sz(L, 12)}} />
+        <StaggerText text={s.title} size={120} weight={900} delay={4} />
+        <div style={{height: sz(L, 12), width: line, background: palette.accent, borderRadius: sz(L, 12)}} />
+      </Body>
+    </SceneFrame>
+  );
+};
+
+// ---------------------------------------------------------------- vurgu öğeleri
+// 4 sn'den uzun sahnelerde her 3-4 sn'de bir ekrana giren kısa vurgu (o anda söylenen bir
+// kelime/rakam): ekran hiçbir zaman 4 sn'den uzun tamamen sabit kalmaz. Sağ üst köşede,
+// içerikle çakışmadan birikir; ölçeklenmez, yalnızca opacity + translate.
+const Accents: React.FC<{accents: Accent[]}> = ({accents}) => {
+  const frame = useCurrentFrame();
+  const {palette} = useTheme();
+  const L = useLayout();
+  const shown = accents.filter((a) => frame >= a.at);
+  if (!shown.length) return null;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: L.contentTop + sz(L, 10),
+        right: L.sidePadding,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-end',
+        gap: sz(L, 16),
+      }}
+    >
+      {shown.map((a, i) => {
+        const s = enterProgress(frame, a.at, 10);
+        return (
+          <div
+            key={i}
+            lang="tr"
+            style={{
+              fontFamily: HEADING,
+              fontWeight: 900,
+              fontSize: sz(L, 46),
+              textTransform: 'uppercase',
+              color: palette.card_text,
+              background: palette.accent,
+              padding: `${sz(L, 10)}px ${sz(L, 26)}px`,
+              borderRadius: sz(L, 16),
+              opacity: s,
+              transform: `translateX(${px((1 - s) * sz(L, 60))}px)`,
+              ...MOVING,
+            }}
+          >
+            {a.text}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+export const SceneView: React.FC<{scene: SceneProps}> = ({scene}) => (
+  <>
+    <SceneBody scene={scene} />
+    {scene.accents && scene.accents.length ? <Accents accents={scene.accents} /> : null}
+  </>
+);
+
+const SceneBody: React.FC<{scene: SceneProps}> = ({scene}) => {
   switch (scene.type) {
     case 'logo_intro':
       return <LogoIntro s={scene} />;
@@ -442,6 +577,10 @@ export const SceneView: React.FC<{scene: SceneProps}> = ({scene}) => {
       return <Chart s={scene} />;
     case 'quote':
       return <Quote s={scene} />;
+    case 'photo':
+      return <Photo s={scene} />;
+    case 'chapter':
+      return <Chapter s={scene} />;
     default:
       return <AbsoluteFill />;
   }

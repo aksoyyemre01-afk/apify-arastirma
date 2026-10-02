@@ -38,7 +38,10 @@ type SceneBase = {
   label: string;
   chips: LogoRef[];
   tone: Tone;
+  // Yalnızca uzun videoda (4 sn'den uzun sahneler); short'larda yok.
+  accents?: Accent[];
 };
+type SceneBaseLong = SceneBase;
 
 export type LogoIntroScene = SceneBase & {type: 'logo_intro'; logo: LogoRef | null};
 export type BigNumberScene = SceneBase & {type: 'big_number'; value: string; unit: string};
@@ -66,7 +69,9 @@ export type SceneProps =
   | ComparisonScene
   | TimelineScene
   | ChartScene
-  | QuoteScene;
+  | QuoteScene
+  | PhotoScene
+  | ChapterScene;
 
 export type CaptionPage = {
   from: number;
@@ -100,4 +105,22 @@ export type ShortProps = {
     sfx: {src: string; from: number; volume?: number}[];
   };
   outro: Outro | null;
+};
+
+// ---------------------------------------------------------------- uzun video (1920x1080)
+// Uzun sahnelerde her 3-4 sn'de bir giren vurgu: `at` sahneye göre kare.
+export type Accent = {at: number; text: string};
+export type PhotoRef = {name: string; src: string; focus?: string};
+export type PhotoScene = SceneBaseLong & {type: 'photo'; photo: PhotoRef | null};
+export type ChapterScene = SceneBaseLong & {type: 'chapter'; title: string};
+
+export type ThumbnailProps = {
+  width: number;
+  height: number;
+  theme: Theme;
+  value: string;
+  unit: string;
+  headline: string;
+  logo: LogoRef | null;
+  tone: Tone;
 };
