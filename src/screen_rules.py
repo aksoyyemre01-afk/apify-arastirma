@@ -149,8 +149,12 @@ def _span(sc: dict, fps: int) -> tuple[float, float]:
 
 
 def _signatures(sc: dict) -> list[str]:
-    """Tekrar kontrolü için sahnenin gösterdiği yazılar (normalize)."""
-    return [" ".join(_norm(w) for w in v.split() if _norm(w)) or v for v in _fields(sc).values()]
+    """Tekrar kontrolü için sahnenin gösterdiği yazılar (normalize). Fotoğraf da bir karttır: aynı
+    kişinin/kurumun fotoğrafı videoda bir kez gösterilir (uzun video)."""
+    sigs = [" ".join(_norm(w) for w in v.split() if _norm(w)) or v for v in _fields(sc).values()]
+    if sc["type"] == "photo" and sc.get("photo"):
+        sigs.append("foto:" + _norm(sc["photo"]["name"]))
+    return sigs
 
 
 def violations(props: dict, timings: list[dict]) -> dict[str, list[str]]:

@@ -12,7 +12,7 @@
 
 import json
 import math
-from datetime import datetime
+from datetime import date, datetime
 
 from .base import CONFIG, PRICING, RUNS_DIR, BudgetExceeded, _monthly_searches
 
@@ -23,8 +23,33 @@ class QuotaExceeded(BudgetExceeded):
 
 # ---------------------------------------------------------------------------- Gemini
 
-def gemini_limit() -> float:
+def _override(today: date | None = None) -> dict | None:
+    """Son tarihli geçici sınır (config: gemini_budget_override {usd, until}); `until` dahil geçerlidir,
+    sonrasında kendiliğinden düşer ve kalıcı gemini_budget_usd_per_week geçerli olur."""
+    o = CONFIG.get("gemini_budget_override") or {}
+    if not o.get("usd") or not o.get("until"):
+        return None
+    return {**o, "active": (today or date.today()) <= date.fromisoformat(o["until"])}
+
+
+def gemini_limit(today: date | None = None) -> float:
+    o = _override(today)
+    if o and o["active"]:
+        return float(o["usd"])
     return float(CONFIG.get("gemini_budget_usd_per_week", 2.0))
+
+
+def override_note(today: date | None = None) -> str:
+    """Rapor notu: geçici sınır aktifse bitiş tarihi; süresi dolduysa config'den kaldırma hatırlatması."""
+    o = _override(today)
+    if not o:
+        return ""
+    base = float(CONFIG.get("gemini_budget_usd_per_week", 2.0))
+    if o["active"]:
+        return (f"_Geçici Gemini sınırı: ${float(o['usd']):.2f} ({o['until']} dahil; sonra otomatik olarak "
+                f"${base:.2f}'a döner). Neden: {o.get('reason', '-')}_")
+    return (f"> ⚠️ HATIRLATMA: geçici Gemini sınırının süresi {o['until']} tarihinde doldu; sınır otomatik olarak "
+            f"${base:.2f}'a döndü. `config/pipeline.json` → `gemini_budget_override` kaydını kaldırın.")
 
 
 def _week_key(ts: str) -> tuple[int, int]:
@@ -123,6 +148,9 @@ def balance_report() -> str:
                           f"`elevenlabs.plan_monthly_credits` değerini kontrol edin."]
     except QuotaExceeded as e:
         lines.append(f"| ElevenLabs | ? | {elevenlabs_cap():,} | **okunamadı** — {e} |")
+    note = override_note()
+    if note:
+        lines += ["", note]
     lines += ["", "_Gemini'nin bakiye API'si yoktur; kalan, bu projenin kayıtlı kullanımından hesaplanır. "
                   "ElevenLabs değerleri API'den anlık okunur._"]
     return "\n".join(lines)

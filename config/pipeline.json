@@ -2,6 +2,11 @@
   "_aciklama": "Multi-agent pipeline ayarları (pipeline.py). Konuya/kanala özgü hiçbir şey içermez.",
   "gemini_budget_usd_per_week": 2.0,
   "gemini_reserve_usd_per_request": 0.05,
+  "gemini_budget_override": {
+    "usd": 2.7,
+    "until": "2026-10-04",
+    "reason": "W40 Theranos uzun videosu (harcanan 2,17 + uzun video payı); 5 Ekim'den itibaren otomatik olarak gemini_budget_usd_per_week (2,00) geçerli"
+  },
   "elevenlabs": {
     "_aciklama": "Aylık sınır = plan_monthly_credits x monthly_limit_ratio (Starter: 30.000 x %90 = 27.000 karakter). Kalan kredi her üretimden ve her seslendirmeden önce ElevenLabs API'sinden okunur (anahtarda user_read izni gerekir); yetmiyorsa ya da okunamıyorsa ses üretilmez.",
     "plan": "starter",
@@ -40,6 +45,7 @@
     "gemini_short_reserve_usd": 1.5,
     "qa_rounds": 1,
     "tts_context": false,
-    "section_gap_sec": 0.6
+    "section_gap_sec": 0.6,
+    "min_spoken_chars": 3800
   }
 }

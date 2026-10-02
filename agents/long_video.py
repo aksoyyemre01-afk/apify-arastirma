@@ -44,7 +44,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def cfg() -> dict:
-    d = {"every_n_weeks": 2, "lookback_weeks": 2, "max_spoken_chars": 4800, "min_seconds": 300,
+    d = {"every_n_weeks": 2, "lookback_weeks": 2, "max_spoken_chars": 4800, "min_spoken_chars": 3800, "min_seconds": 300,
          "max_seconds": 360, "margin": 0.10, "gemini_short_reserve_usd": 1.50, "qa_rounds": 1,
          "tts_context": False, "section_gap_sec": long_planner.SECTION_GAP}
     return {**d, **CONFIG.get("long", {})}
@@ -129,12 +129,15 @@ def estimate(research: dict, script: LongVideoScript | None = None) -> dict:
     script_usd = _usd(s_in + facts_tokens + 1500, s_out * k)
     items = {
         "script yazımı (1 istek)": 0.0 if script else script_usd,
-        "kısaltma (en fazla 1 istek, olasılığa bakmadan dahil)": 0.0 if script else _usd(s_out * k + 1500, s_out * k * 0.8),
+        "kısaltma ya da uzatma (en fazla 1 istek, olasılığa bakmadan dahil)": 0.0 if script else _usd(s_out * k + 1500, s_out * k * 0.8),
         f"yeni iddiaların doğrulanması ({int(CONFIG.get('verify', {}).get('max_rounds', 2))} tur, aramalı)":
             int(CONFIG.get("verify", {}).get("max_rounds", 2)) * 1.5 * (_usd(*avg("doğrulama: araştırma (Google Search)")) + _usd(*avg("doğrulama: karar"))),
         "düzeltme (sorunlu bölüm, 1 istek)": script_usd * 0.5,
         f"görsel QA ({c['qa_rounds']} tur)": c["qa_rounds"] * 2 * _usd(*avg("QA görsel puanlama")),
     }
+    if script is not None:
+        # Script yazılmış ve doğrulanmışsa (ONAY B) geriye kalan tek Gemini işi görsel QA'dır.
+        items = {k: v for k, v in items.items() if k.startswith("görsel QA")}
     gemini = sum(items.values())
     return {"chars": chars, "chars_with_margin": math.ceil(chars * (1 + c["margin"])),
             "gemini_items": items, "gemini_usd": gemini, "gemini_with_margin": gemini * (1 + c["margin"]),
@@ -246,6 +249,18 @@ Her sahne kendi cümlesiyle kalsın.
 
 {script}"""
 
+EXTEND_PROMPT = """Aşağıdaki uzun video script'inin (JSON) toplam seslendirmesi {chars} karakter; 5-6 dakikalık bir video için
+{min_chars}-{max_chars} karakter olmalı (rakamlar okunuşuyla sayılır). Yapıyı (hook, bölümler, başlıklar, kapanış)
+koruyarak her bölümü derinleştir: aşağıdaki DOĞRULANMIŞ OLGULARDAN henüz kullanılmayanları, bağlamı ve sonuçlarını
+ekle. Doğrulanmış olgularda olmayan yeni rakam/tarih ekleme; ekleyeceksen ayrıca doğrulanacağını bil. Her yeni cümle
+kendi sahnesiyle gelsin (ekrandaki metin o cümlede söylenen kelimelerden; aynı kart/metin tekrar etmesin).
+
+DOĞRULANMIŞ OLGULAR:
+{facts}
+
+Script:
+{script}"""
+
 REVISE_SECTION_PROMPT = """Aşağıdaki video bölümünde (JSON) şu sorunlar bulundu:
 {feedback}
 Bölümü düzelt: yanlış olguyu doğrusuyla değiştir, doğrulanamayanı çıkar ya da doğrulanabilir genel bir ifadeye
@@ -295,7 +310,130 @@ def write_script(ctx: RunContext, research: dict) -> LongVideoScript:
         after = len(tr_numbers.to_spoken(script.narration_full))
         ctx.log("Senarist", f"Kısaltma (tek istek): {chars} -> {after} karakter"
                 + ("" if after <= c["max_spoken_chars"] else " — UYARI: hâlâ sınırın üstünde, bu haliyle kullanılacak"))
+    elif chars < c["min_spoken_chars"]:
+        script = extend_script(ctx, script, research)
     return script
+
+
+def extend_script(ctx: RunContext, script: LongVideoScript, research: dict) -> LongVideoScript:
+    """Metin 5-6 dk için kısa kaldıysa TEK bir uzatma isteği (kısaltmanın simetriği)."""
+    c = cfg()
+    chars = len(tr_numbers.to_spoken(script.narration_full))
+    ctx.check_budget()
+    ctx.current_agent = "Senarist"
+    resp = script_writer.generate_raw(
+        EXTEND_PROMPT.format(chars=chars, min_chars=c["min_spoken_chars"], max_chars=c["max_spoken_chars"],
+                             facts="\n".join(f"- {f}" for f in research["facts"]), script=script.model_dump_json(indent=1)),
+        _schema_cfg(LongVideoScript), purpose="uzun video uzatma")
+    longer = LongVideoScript.model_validate_json(resp.text)
+    ctx.state.setdefault("script_drafts", []).append({"purpose": "uzatma", "script": longer.model_dump()})
+    ctx.save()  # hiçbir istek sonucu kaybolmasın
+    after = len(tr_numbers.to_spoken(longer.narration_full))
+    ctx.log("Senarist", f"Uzatma (tek istek): {chars} -> {after} karakter")
+    if after > c["max_spoken_chars"]:
+        trimmed = trim_local(longer, c["max_spoken_chars"])
+        if trimmed is not None:
+            ctx.log("Senarist", f"Üst sınır az farkla aşıldı: yerelde kırpıldı (API yok) -> "
+                                f"{len(tr_numbers.to_spoken(trimmed.narration_full))} karakter")
+            return trimmed
+        ctx.check_budget()
+        resp = script_writer.generate_raw(
+            SHORTEN_PROMPT.format(chars=after, max_chars=c["max_spoken_chars"], script=longer.model_dump_json(indent=1)),
+            _schema_cfg(LongVideoScript), purpose="uzun video kısaltma")
+        longer = LongVideoScript.model_validate_json(resp.text)
+        ctx.log("Senarist", f"Kısaltma (tek istek): {after} -> {len(tr_numbers.to_spoken(longer.narration_full))} karakter")
+    return longer
+
+
+TARGETED_EXTEND_PROMPT = """Aşağıdaki uzun video script'ini (JSON) BÖLÜM BÖLÜM belirtilen uzunluklara getir. Uzunluklar okunuş
+karakteridir (rakamlar okunuşuyla, boşluklar dahil). Her bölümün hedefine ±%5 içinde uy; bu kesin bir şarttır.
+
+{targets}
+
+Kurallar: yapıyı ve başlıkları koru; mevcut cümleleri koru, aralarına ve sonlarına derinleştiren yeni cümleler ekle.
+Yeni olgu yalnızca aşağıdaki DOĞRULANMIŞ OLGULARDAN gelsin; yeni rakam/tarih uydurma. Her yeni cümle kendi sahnesiyle
+gelsin (ekrandaki metin o cümlede söylenen kelimelerden; aynı kart/metin/fotoğraf tekrar etmesin).
+
+DOĞRULANMIŞ OLGULAR:
+{facts}
+
+Script:
+{script}"""
+
+
+def section_targets(script: LongVideoScript, total: int) -> dict[str, int]:
+    """Toplam hedefi bölümlere dağıtır: hook %10, kapanış %8, kalan bölümlere eşit."""
+    hook, closing = round(total * 0.10), round(total * 0.08)
+    per = (total - hook - closing) // max(len(script.chapters), 1)
+    return {"hook": hook, **{f"bolum-{i}": per for i in range(1, len(script.chapters) + 1)}, "kapanis": closing}
+
+
+def request_usd_estimate(ctx: RunContext, purposes: tuple[str, ...], fallback: float) -> float:
+    """Bu çalıştırmada aynı türden önceki isteklerin gerçek ortalama maliyeti (yoksa fallback), %10 paylı."""
+    same = [u for u in ctx.usage if u["service"] == "gemini" and u["purpose"] in purposes]
+    avg = sum(_usd(u["input_tokens"], u["output_tokens"]) for u in same) / len(same) if same else fallback
+    return avg * (1 + cfg()["margin"])
+
+
+def extend_targeted(ctx: RunContext, script: LongVideoScript, research: dict, low: int, high: int) -> tuple[LongVideoScript | None, int]:
+    """TEK hedefli uzatma isteği; sonuç [low, high] dışındaysa (None, karakter) döner — yeni istek ATILMAZ."""
+    total_target = (low + high) // 2
+    targets = section_targets(script, total_target)
+    cur = {k: len(tr_numbers.to_spoken(section_text(s))) for k, s in script.sections()}
+    lines = [f"- {k}{' (' + s.heading + ')' if s.heading else ''}: şu an {cur[k]} -> hedef {targets[k]} karakter"
+             for k, s in script.sections()]
+    ctx.check_budget()
+    ctx.current_agent = "Senarist"
+    resp = script_writer.generate_raw(
+        TARGETED_EXTEND_PROMPT.format(targets="\n".join(lines) + f"\nTOPLAM hedef: {total_target} (kabul aralığı {low}-{high})",
+                                      facts="\n".join(f"- {f}" for f in research["facts"]), script=script.model_dump_json(indent=1)),
+        _schema_cfg(LongVideoScript), purpose="uzun video hedefli uzatma")
+    out = LongVideoScript.model_validate_json(resp.text)
+    ctx.state.setdefault("script_drafts", []).append({"purpose": "hedefli uzatma", "script": out.model_dump()})
+    ctx.save()
+    chars = len(tr_numbers.to_spoken(out.narration_full))
+    per = {k: len(tr_numbers.to_spoken(section_text(s))) for k, s in out.sections()}
+    ctx.log("Senarist", f"Hedefli uzatma (tek istek): {sum(cur.values())} -> {chars} karakter (kabul {low}-{high})",
+            "\n".join(f"{k}: {cur[k]} -> {per.get(k, 0)} (hedef {targets[k]})" for k in targets))
+    return (out if low <= chars <= high else None), chars
+
+
+def fix_sentence(script: LongVideoScript, old: str, new: str) -> int:
+    """Bir ifadeyi seslendirme ve ekran alanlarında değiştirir (API yok). Değişen yer sayısını döner."""
+    n = 0
+    for _, sec in script.sections():
+        if old in sec.narration:
+            sec.narration = sec.narration.replace(old, new)
+            n += 1
+        for sc in sec.scenes:
+            for f in ("narration", "text", "label"):
+                if old in (getattr(sc, f) or ""):
+                    setattr(sc, f, getattr(sc, f).replace(old, new))
+                    n += 1
+    return n
+
+
+def trim_local(script: LongVideoScript, max_chars: int, max_over: float = 0.10) -> LongVideoScript | None:
+    """Üst sınır en fazla %10 aşıldıysa API'siz kırpma: en uzun bölümün ortasından, rakam ve özel ad
+    içermeyen cümleler sahneleriyle birlikte çıkarılır (ilk ve son cümleye dokunulmaz). Olmazsa None."""
+    s = script.model_copy(deep=True)
+    total = lambda: len(tr_numbers.to_spoken(s.narration_full))  # noqa: E731
+    if total() > max_chars * (1 + max_over):
+        return None
+    while total() > max_chars:
+        chapters = sorted(s.chapters, key=lambda ch: -len(tr_numbers.to_spoken(section_text(ch))))
+        removed = False
+        for ch in chapters:
+            cands = [i for i, sc in enumerate(ch.scenes[1:-1], 1)
+                     if not re.search(r"\d", sc.narration) and not [w for w in sc.narration.split()[1:] if w[:1].isupper()]]
+            if cands:
+                del ch.scenes[cands[len(cands) // 2]]
+                ch.narration = " ".join(sc.narration for sc in ch.scenes)
+                removed = True
+                break
+        if not removed:
+            return None
+    return s
 
 
 def _sentences(script: LongVideoScript) -> list[tuple[str, str]]:
@@ -345,6 +483,10 @@ def verify_new(ctx: RunContext, script: LongVideoScript, research: dict) -> Long
         claims = [verifier._with_sources(c, sources) for c in ver.claims]
         for c in claims:
             c["section"] = items[c["item"] - 1][0] if 1 <= c["item"] <= len(items) else ""
+            c["sentence"] = items[c["item"] - 1][1] if 1 <= c["item"] <= len(items) else ""
+        # Doğrulanan yeni cümleler doğrulanmış olgulara eklenir: sonraki turlarda yeniden aranmaz.
+        research["facts"] += [c["sentence"] for c in claims if c["verdict"] == "verified" and c["sentence"]
+                              and c["sentence"] not in research["facts"]]
         result = {"round": rnd, "claims": claims, "new": len(items), "reused": total - len(items),
                   "grounded": grounded, "queries": queries, "sources": sources}
         history.append(result)
@@ -458,12 +600,13 @@ def thumbnail_props(script: LongVideoScript, research: dict, cfg_brand: dict, lo
             "logo": logo_ref(script.main_brand) if script.main_brand else None, "tone": "fall"}
 
 
-def measure(d: Path, script: LongVideoScript, props: dict, marks: list, dry_run: bool = False) -> list[dict]:
+def measure(d: Path, script: LongVideoScript, props: dict, marks: list, dry_run: bool = False,
+            target: dict | None = None) -> list[dict]:
     """Uzun video ölçümleri (kod düzeyi, ücretsiz). İhlal varsa video QA'dan geçmez."""
     from .critic import _moov_first, _probe
     from src.scene_planner import measure_lufs
 
-    c, checks = cfg(), []
+    c, checks = {**cfg(), **(target or {})}, []  # target: bu çalıştırmaya özel süre hedefi (state.duration_target)
 
     def check(name, ok, value):
         checks.append({"name": name, "ok": bool(ok), "value": value})
@@ -598,7 +741,7 @@ def produce(ctx: RunContext, dry_run: bool = False) -> None:
     tfiles = {**reg.files, **{f"fonts/{brand['fonts'][k]}": renderer.scene_planner.FONT_DIR / brand["fonts"][k] for k in ("heading", "body")}}
     renderer.render_thumbnail(ctx.dir, tprops, tfiles)
     marks = long_planner.chapter_marks(starts, script)
-    checks = measure(ctx.dir, script, props, marks, dry_run)
+    checks = measure(ctx.dir, script, props, marks, dry_run, ctx.state.get("duration_target"))
     qa = None if dry_run and not ctx.state.get("dry_run_vision") else vision_qa(ctx, props)
     ctx.state.update(section_starts=starts, marks=marks, credits=credits, checks=checks, qa=qa,
                      description=description(script, marks, credits, research),

@@ -40,6 +40,8 @@ class Env:
         self._set(limits, "elevenlabs_status", lambda: {"tier": "starter", "used": 27000 - el_remaining, "plan_limit": 30000,
                                                         "cap": 27000, "remaining": el_remaining, "reset": reset})
         self._set(limits, "weekly_gemini_usd", lambda now=None: spent)
+        # Testler config'den bağımsız: haftalık sınır 2,00 (geçici sınır kaydı olsa da).
+        self._set(limits, "gemini_limit", lambda today=None: 2.0)
         self.api_calls = []
         self._set(script_writer, "generate_raw", self._no_api)
         if short_stage:
