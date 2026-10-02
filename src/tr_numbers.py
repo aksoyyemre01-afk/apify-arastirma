@@ -87,6 +87,9 @@ def spoken_form(text: str) -> tuple[str, list[int]]:
     spoken, groups = [], []
     for i, tok in enumerate(toks):
         s = _token_words(tok, toks[i + 1] if i + 1 < len(toks) else "")
+        # Cümle başındaki sayı büyük harfle başlar ("On bir yıl..."): TTS cümle başı tonlaması için.
+        if s != tok and (i == 0 or toks[i - 1].endswith((".", "!", "?", ":"))) and s[:1].isalpha():
+            s = s[:1].replace("i", "İ").replace("ı", "I").upper() + s[1:]
         spoken.append(s)
         groups.append(len(s.split()))
     return " ".join(spoken), groups

@@ -315,6 +315,17 @@ def _convert(sc: dict, win: _Window, seen: set[str], prev_type: str, brands: lis
     valid = [c for c in cands if ok(c)]
     pick = next((c for c in valid if c["type"] != prev_type), valid[0] if valid else None)
     if pick is None:
+        # Hepsi daha önce gösterilmişse: söylenen kelimelerin giderek kısalan sonu, gösterilmemiş
+        # bir metin bulunana kadar ("Laboratuvar lisansı iptal edildi" -> "Lisansı iptal edildi").
+        words = text.split()
+        for k in range(len(words) - 1, 1, -1):
+            tail = " ".join(words[-k:])
+            tail = tail[:1].replace("i", "İ").replace("ı", "I").upper() + tail[1:]
+            c = {"type": "quote", "text": tail, "highlight": _highlight(tail), "label": ""}
+            if ok(c):
+                pick = c
+                break
+    if pick is None:
         pick = {"type": "quote", "text": text, "highlight": _highlight(text), "label": ""}
     for k in [k for k in sc if k not in base]:
         del sc[k]
