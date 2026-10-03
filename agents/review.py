@@ -342,6 +342,13 @@ def write_long(ctx: RunContext) -> Path:
                 lines += ["| Sonuç | İddia | Not |", "|---|---|---|"]
                 lines += [f"| {icon.get(c['verdict'], c['verdict'])} | {c['claim']} | {c.get('correct') or c.get('explanation', '')} |"
                           for c in v["claims"]] + [""]
+    if st.get("editor_sources"):
+        lines += ["## Editör eklemeleri ve kaynakları", "",
+                  "_Gemini'siz eklendi; kaynaklar short run'ının doğrulama kayıtlarından (Google araması)._", ""]
+        for e in st["editor_sources"]:
+            links = ", ".join(f"[{t}]({u})" for t, u in e["sources"]) or "kaynak yok"
+            lines.append(f"- **{e['sentence']}** — {e['basis']} ({links})")
+        lines += [""]
     if st.get("checks"):
         lines += ["## Video", "", f"- Video: `{st.get('video', '')}`", f"- Küçük resim: `{st.get('thumbnail', '')}`", "",
                   "| Ölçüm | Değer | |", "|---|---|---|"]

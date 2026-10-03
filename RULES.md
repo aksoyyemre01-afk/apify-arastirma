@@ -213,7 +213,13 @@ formata özgü şu değerler farklıdır:
 - **Ekran 4 sn'den fazla sabit kalmaz:** 4 sn'den uzun sahnelerde her ~3,5 sn'de bir yeni öğe
   (o anda söylenen bir kelime/rakamın vurgusu) ekrana girer.
 - **Çeşitlilik:** aynı sahne tipi en fazla 60 sn kesintisiz sürer; her 90 sn'lik aralıkta en az 2
-  farklı tip vardır.
+  farklı tip vardır. **Art arda iki alıntı kartı gelmez:** ikinci alıntı, o cümlede söylenen bir
+  yıla (zaman çizelgesi), rakama (rakam kartı), markaya (logo) ya da kişiye (fotoğraf; soyadı da
+  yeter) çevrilir; hiçbiri yoksa iki cümle tek alıntı kartında birleşir (en fazla 8 sn). Bu da
+  mümkün değilse ölçüm ihlali raporlar (editör kararı gerekir).
+- **Açıklama kaynakları:** sosyal medya siteleri (facebook, instagram, x/twitter, tiktok, linkedin,
+  reddit, pinterest, threads, youtube) yayın açıklamasının kaynak listesine girmez
+  (`config/pipeline.json` → `long.excluded_source_domains`).
 - **Fotoğraf:** Wikimedia Commons'tan, yalnızca serbest lisanslı (CC0, kamu malı, CC BY, CC BY-SA);
   kişi/kurumun Wikidata resmi görseli (yanlış kişi gelmez). Fotoğraf o ad söylenirken görünür.
   **Yavaş zoom yalnızca üzerinde yazı olmayan fotoğraf katmanında serbesttir**; yazılar sabittir.

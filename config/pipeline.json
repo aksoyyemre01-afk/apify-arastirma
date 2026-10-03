@@ -46,6 +46,19 @@
     "qa_rounds": 1,
     "tts_context": false,
     "section_gap_sec": 0.6,
-    "min_spoken_chars": 3800
+    "min_spoken_chars": 3800,
+    "excluded_source_domains": [
+      "facebook.com",
+      "instagram.com",
+      "twitter.com",
+      "x.com",
+      "tiktok.com",
+      "linkedin.com",
+      "reddit.com",
+      "pinterest.com",
+      "threads.net",
+      "youtube.com",
+      "youtu.be"
+    ]
   }
 }

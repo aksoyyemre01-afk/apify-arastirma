@@ -83,7 +83,12 @@ def build_props(script: LongVideoScript, timings: list[dict], audio_path: Path, 
     props_scenes = [_scene_props(seg, reg) for seg in segs]
     screen_rules.enforce(props_scenes, timings, FPS, _subjects(script),
                          lambda b: scene_planner._logo_ref(b, {"start": 0, "end": 0}, reg, "", None))
+    props_scenes = break_quote_runs(props_scenes, timings, _subjects(script),
+                                    lambda b: scene_planner._logo_ref(b, {"start": 0, "end": 0}, reg, "", None))
     _add_accents(props_scenes, timings)
+    # Atıf: yalnızca son planda GERÇEKTEN gösterilen fotoğraflar, her biri bir kez.
+    shown = {sc["photo"]["name"] for sc in props_scenes if sc["type"] == "photo" and sc.get("photo")}
+    credits = [c for i, c in enumerate(credits) if c["name"] in shown and c["name"] not in [x["name"] for x in credits[:i]]]
 
     audio_frames = scene_planner._frame(audio_duration) + 1
     outro = scene_planner._outro(cfg, {"cta": script.cta}, None, audio_frames)
@@ -105,6 +110,40 @@ def build_props(script: LongVideoScript, timings: list[dict], audio_path: Path, 
         "outro": outro,
     }
     return props, files, credits
+
+
+def break_quote_runs(scenes: list[dict], timings: list[dict], brands: list[str], logo_ref) -> list[dict]:
+    """Uzun video kuralı: art arda iki alıntı kartı gelmez. İkinci alıntı, o anda söylenen bir yıla
+    (zaman çizelgesi), rakama (rakam kartı) ya da markaya (logo kartı) çevrilir; hiçbiri yoksa iki
+    cümle tek alıntı kartında birleşir (toplam en fazla MAX_SCENE sn). Hepsi tekrar/söylenme
+    kurallarına (screen_rules) uyar; olmuyorsa bırakılır ve ölçüm ihlali raporlar."""
+    out: list[dict] = []
+    seen: set[str] = set()
+    for sc in scenes:
+        prev = out[-1] if out else None
+        if sc["type"] == "quote" and prev and prev["type"] == "quote":
+            a, b = sc["from"] / FPS, (sc["from"] + sc["durationInFrames"]) / FPS
+            win = screen_rules._Window(timings, a, b)
+            near = {screen_rules._norm(n["logo"]["name"]) for n in out[-2:] if n["type"] == "logo_intro" and n.get("logo")}
+            cand = dict(sc)
+            screen_rules._convert(cand, win, seen, "quote", [x for x in brands if screen_rules._norm(x) not in near],
+                                  logo_ref, out[-1:])
+            if cand["type"] != "quote":
+                out.append(cand)
+                seen.update(screen_rules._signatures(cand))
+                continue
+            if (sc["from"] + sc["durationInFrames"] - prev["from"]) / FPS <= MAX_SCENE:
+                prev["durationInFrames"] = sc["from"] + sc["durationInFrames"] - prev["from"]
+                continue  # birleşik alıntı: ikinci cümle vurgu öğesiyle (accents) ekrana girer
+        out.append(sc)
+        seen.update(screen_rules._signatures(sc))
+    return out
+
+
+def quote_run_violations(props: dict) -> list[str]:
+    s = props["scenes"]
+    return [f"sahne {i} ve {i + 1} ({s[i]['from'] / FPS:.0f} sn) art arda alıntı" for i in range(1, len(s))
+            if s[i]["type"] == "quote" and s[i - 1]["type"] == "quote"]
 
 
 def _split_long(segs: list[dict], timings: list[dict]) -> list[dict]:
@@ -151,18 +190,20 @@ def _add_accents(scenes: list[dict], timings: list[dict]) -> None:
         if b - a <= STATIC_MAX:
             continue
         shown = " ".join(screen_rules._fields(sc).values()).lower()
-        accents, t = [], a + min(ACCENT_EVERY, (b - a) / 2)
-        while t < b - 0.3:
-            cands = [w for w in timings if t - 1.2 <= w["start"] <= t + 0.8 and w["start"] < b - 0.3]
-            pick = _best_word(cands, used, shown) or _best_word(
-                [w for w in timings if a + 1.0 <= w["start"] < min(b - 0.3, t + STATIC_MAX - ACCENT_EVERY + 0.4)], used, "")
-            if pick:
-                at = scene_planner._frame(max(pick["start"], a + 0.2)) - sc["from"]
-                accents.append({"at": at, "text": pick["word"].strip(".,!?;:\"'’").upper()})
-                used.add(screen_rules._norm(pick["word"]))
-                t = pick["start"] + ACCENT_EVERY
-            else:
-                t += 0.5
+        # Her yeni öğe bir öncekinden (ya da sahne başından) en geç ~3,8 sn sonra girer: kelime,
+        # (son işaret + 1,5 sn, son işaret + 3,8 sn] aralığında söylenenler arasından seçilir.
+        accents, last = [], a
+        limit = STATIC_MAX - 0.2
+        while b - last > limit:
+            window = [w for w in timings if last + 1.5 < w["start"] <= min(last + limit, b - 0.3)]
+            pick = _best_word(window, used, shown) or _best_word(window, used, "") or next(
+                (w for w in reversed(window) if len(screen_rules._norm(w["word"])) >= 3), None)
+            if not pick:
+                break  # bu aralıkta konuşma yok (sessizlik)
+            at = scene_planner._frame(pick["start"]) - sc["from"]
+            accents.append({"at": at, "text": pick["word"].strip(".,!?;:\"'’").upper()})
+            used.add(screen_rules._norm(pick["word"]))
+            last = pick["start"]
         if accents:
             sc["accents"] = accents
 

@@ -46,7 +46,9 @@ ROOT = Path(__file__).resolve().parent.parent
 def cfg() -> dict:
     d = {"every_n_weeks": 2, "lookback_weeks": 2, "max_spoken_chars": 4800, "min_spoken_chars": 3800, "min_seconds": 300,
          "max_seconds": 360, "margin": 0.10, "gemini_short_reserve_usd": 1.50, "qa_rounds": 1,
-         "tts_context": False, "section_gap_sec": long_planner.SECTION_GAP}
+         "tts_context": False, "section_gap_sec": long_planner.SECTION_GAP,
+         "excluded_source_domains": ["facebook.com", "instagram.com", "twitter.com", "x.com", "tiktok.com", "linkedin.com",
+                                     "reddit.com", "pinterest.com", "threads.net", "youtube.com", "youtu.be"]}
     return {**d, **CONFIG.get("long", {})}
 
 
@@ -636,6 +638,7 @@ def measure(d: Path, script: LongVideoScript, props: dict, marks: list, dry_run:
     for name, viol in (("En uzun sahne 8 sn (fotoğraf 10 sn)", long_planner.max_scene_violations(props)),
                        ("Ekran 4 sn'den fazla sabit kalmıyor", long_planner.static_violations(props)),
                        ("Sahne tipi çeşitliliği (60 sn / 90 sn)", long_planner.variety_violations(props)),
+                       ("Art arda iki alıntı kartı yok", long_planner.quote_run_violations(props)),
                        ("YouTube bölümleri geçerli", long_planner.chapter_problems(marks, dur))):
         check(name, not viol, "; ".join(viol[:3]) or "uygun")
     if dry_run:  # sessiz sahte ses yazıya dökülemez
@@ -654,7 +657,9 @@ def description(script: LongVideoScript, marks: list, credits: list[dict], resea
     lines += [f"{long_planner.fmt_ts(t)} {name}" for t, name in marks]
     if credits:
         lines += ["", "Fotoğraflar (Wikimedia Commons):"] + [f"- {commons.credit_line(m)}" for m in credits]
-    titles = sorted({t for t in research["sources"].values() if t})
+    # Sosyal medya siteleri yayın açıklamasının kaynak listesine girmez (config long.excluded_source_domains).
+    banned = tuple(cfg()["excluded_source_domains"])
+    titles = sorted({t for t in research["sources"].values() if t and not t.lower().endswith(banned)})
     if titles:
         lines += ["", "Kaynaklar: " + ", ".join(titles[:12])]
     lines += ["", " ".join(f"#{re.sub(r'[^0-9A-Za-zÇĞİÖŞÜçğıöşü]', '', t)}" for t in script.tags[:3])]

@@ -144,6 +144,13 @@ class _Window:
         return (text[:1].replace("i", "İ").replace("ı", "I").upper() + text[1:]) if text else ""
 
 
+def _name_spoken(win: "_Window", name: str) -> bool:
+    """Büyük gösterilen ad söylendi mi: markada ilk kelime ("Wall Street Journal" -> "Wall"), kişide
+    soyadı da yeter ("Elizabeth Holmes" -> "Holmes"). En az 3 harfli kelimeler dikkate alınır."""
+    parts = [p for p in name.split() if len(_norm(p)) >= 3]
+    return bool(parts) and (win.has_word(parts[0]) or (len(parts) > 1 and win.has_word(parts[-1])))
+
+
 def _span(sc: dict, fps: int) -> tuple[float, float]:
     return sc["from"] / fps, (sc["from"] + sc["durationInFrames"]) / fps
 
@@ -171,7 +178,7 @@ def violations(props: dict, timings: list[dict]) -> dict[str, list[str]]:
             if miss:
                 unspoken.append(f"{where}: {f}=\"{v}\" söylenmiyor ({', '.join(miss)}); o sırada: \"{' '.join(win.words)}\"")
         for f, name in _big_brands(sc).items():
-            if not any(win.has_word(t) for t in name.split()[:1]):
+            if not _name_spoken(win, name):
                 unspoken.append(f"{where}: {f} logosu \"{name}\" o sırada söylenmiyor; o sırada: \"{' '.join(win.words)}\"")
         for c in sc.get("chips") or []:
             if c and not c.get("hidden") and not spoken_all.has_word(c["name"].split()[0]):
@@ -249,7 +256,7 @@ def enforce(scenes: list[dict], timings: list[dict], fps: int, brands: list[str]
         # 2) Ana içerik söylenmiyor ya da tekrar ediyorsa sahne dönüştürülür.
         main_bad = False
         if not hidden:
-            main_bad = any(not any(win.has_word(t) for t in n.split()[:1]) for n in _big_brands(sc).values())
+            main_bad = any(not _name_spoken(win, n) for n in _big_brands(sc).values())
         if sc["type"] == "big_number":
             main_bad |= bool(win.unspoken(_fields(sc).get("value_unit", "")))
         if sc["type"] == "timeline":
