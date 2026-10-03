@@ -14,7 +14,7 @@ Konuya/kanala özgü hiçbir şey içermez; API isteği yapmaz (fotoğraf/logo i
 import re
 from pathlib import Path
 
-from . import commons, scene_planner, screen_rules
+from . import commons, scene_planner, screen_rules, tr_nouns
 from .schemas import LongVideoScript, section_text
 
 WIDTH, HEIGHT, FPS = 1920, 1080, scene_planner.FPS
@@ -149,25 +149,10 @@ _QUALIFIERS = {"sahte", "büyük", "korkunç", "tutarsız", "yanlış", "hatalı
 
 
 def keyword_card(sc: dict, win, seen: set[str]) -> dict | None:
-    """O anda söylenen en anlamlı 1-3 kelime (art arda gelmeyen, daha önce gösterilmemiş)."""
-    raw = [w.strip(".,!?;:\"'’") for w in win.core]
-    words = [re.split(r"['’]", w)[0] for w in raw]  # "Vadisi'ni" -> "Vadisi"
-    def ok(w):
-        n = screen_rules._norm(w)
-        return len(n) >= 4 and n not in screen_rules._DANGLING and not _VERBISH.search(n)
-    cands = []
-    for i, w in enumerate(words):
-        if not ok(w):
-            continue
-        cands.append([w])
-        if i + 1 < len(words) and ok(words[i + 1]):
-            proper = w[:1].isupper() and words[i + 1][:1].isupper() and i > 0  # "Silikon Vadisi"
-            if proper or screen_rules._norm(w) in _QUALIFIERS:               # "sahte vaatler"
-                cands.append([w, words[i + 1]])
+    """O anda söylenen isim ya da isim tamlaması, YALIN hâlde ("vaatler" -> "vaat"); yoksa None."""
     best, best_score = None, 0
-    for phrase in cands:
-        text = " ".join(phrase)
-        score = sum(len(x) for x in phrase) + (6 if re.search(r"\d", text) else 0) + (4 if len(phrase) > 1 else 0)
+    for text, score in tr_nouns.candidates(list(win.core)):
+        score += 6 if re.search(r"\d", text) else 0
         if score > best_score and screen_rules._sig(text) not in seen:
             best, best_score = text, score
     if not best:
@@ -258,17 +243,38 @@ def _add_accents(scenes: list[dict], timings: list[dict]) -> None:
         accents, last = [], a
         limit = STATIC_MAX - 0.2
         while b - last > limit:
-            window = [w for w in timings if last + 1.5 < w["start"] <= min(last + limit, b - 0.3)]
-            pick = _best_word(window, used, shown) or _best_word(window, used, "") or next(
-                (w for w in reversed(window) if len(screen_rules._norm(w["word"])) >= 3), None)
+            window = [w for w in timings if last + 1.0 < w["start"] <= min(last + limit, b - 0.3)]
+            pick = _best_noun(window, used, shown, timings)
             if not pick:
-                break  # bu aralıkta konuşma yok (sessizlik)
+                break  # bu aralıkta uygun isim yok: vurgu gösterilmez (kural: yalnızca isim/isim tamlaması)
             at = scene_planner._frame(pick["start"]) - sc["from"]
-            accents.append({"at": at, "text": pick["word"].strip(".,!?;:\"'’").upper()})
-            used.add(screen_rules._norm(pick["word"]))
+            accents.append({"at": at, "text": pick["text"]})  # büyük harf Remotion tarafında, lang="tr" (İ/I doğru)
+            used.add(screen_rules._sig(pick["text"]))
             last = pick["start"]
         if accents:
             sc["accents"] = accents
+
+
+def _sentence_start(w: dict, timings: list[dict]) -> bool:
+    k = next((j for j, x in enumerate(timings) if x is w or (x["start"] == w["start"] and x["word"] == w["word"])), 0)
+    return k == 0 or timings[k - 1]["word"].rstrip("\"'”’)").endswith((".", "!", "?", ":"))
+
+
+def _best_noun(words: list[dict], used: set[str], shown: str, all_timings: list[dict] = ()) -> dict | None:
+    """Zamanlı kelimelerden en iyi isim/isim tamlaması (yalın hâl): {'text', 'start'}."""
+    best, best_score = None, 0
+    for i, w in enumerate(words):
+        mid = i > 0 or not _sentence_start(w, all_timings)
+        for text, score in tr_nouns.candidates([x["word"] for x in words[i:i + 2]], mid_first=mid):
+            head = (tr_nouns.noun_lemma(w["word"]) or tr_nouns.adjective_lemma(w["word"]) or "#").lower()
+            if not text.lower().startswith(head):
+                continue  # aday bu kelimeyle başlamıyor (bir sonraki kelimenin adayı)
+            sig = screen_rules._sig(text)
+            if sig in used or sig in screen_rules._sig(shown):
+                continue
+            if score > best_score:
+                best, best_score = {"text": text, "start": w["start"]}, score
+    return best
 
 
 def _best_word(words: list[dict], used: set[str], shown: str) -> dict | None:
@@ -305,7 +311,9 @@ def static_violations(props: dict) -> list[str]:
         dur = sc["durationInFrames"] / FPS
         if dur <= STATIC_MAX:
             continue
-        marks = [0.0] + [a["at"] / FPS for a in sc.get("accents") or []] + [dur]
+        caps = [(c["from"] - sc["from"]) / FPS for c in props.get("captions", [])
+                if sc["from"] < c["from"] < sc["from"] + sc["durationInFrames"]]
+        marks = sorted([0.0] + [a["at"] / FPS for a in sc.get("accents") or []] + caps + [dur])
         gap = max(b - a for a, b in zip(marks, marks[1:]))
         if gap > STATIC_MAX + 0.05:
             out.append(f"sahne {i} ({sc['from'] / FPS:.1f} sn, {sc['type']}, {dur:.1f} sn): {gap:.1f} sn yeni öğe yok")

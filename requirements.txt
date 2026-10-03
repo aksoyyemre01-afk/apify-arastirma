@@ -5,3 +5,4 @@ python-dotenv>=1.0.0
 pydantic>=2.6.0
 requests>=2.31.0
 faster-whisper>=1.1.0
+zeyrek>=0.1.3

@@ -210,13 +210,21 @@ formata özgü şu değerler farklıdır:
 
 - **Sahne süresi:** en uzun sahne 8 sn, fotoğrafta 10 sn (short'taki 3 sn yerine). Uzun sahne
   bölünür; ikinci parça o anda söylenenden üretilen farklı bir karttır.
-- **Ekran 4 sn'den fazla sabit kalmaz:** 4 sn'den uzun sahnelerde her ~3,5 sn'de bir yeni öğe
-  (o anda söylenen bir kelime/rakamın vurgusu) ekrana girer.
+- **Ekran 4 sn'den fazla sabit kalmaz:** 4 sn'den uzun sahnelerde en geç ~3,8 sn'de bir yeni öğe
+  ekrana girer: vurgu öğesi, rakam/etiket ya da altyazı vurgusu (konuşma sürdükçe altyazı her
+  kelimede değişir). Ölçüm bunların hepsini sayar.
+- **İsim kuralı (anahtar kelime kartı ve vurgu öğesi):** yalnızca isim ya da isim tamlaması, **yalın
+  hâlde** (çekim eki atılmış: "vaatler" -> "vaat", "laboratuvarı" -> "laboratuvar"; tamlamada tamlama
+  eki korunur: "eczane zinciri", "hapis cezası"; sıfat + isim: "sahte vaat", "bilimsel dayanak").
+  Çekimli fiil, ortaç ve fiilden türemiş kelimeler ("çalışan", "büyüleyici", "kaçınılmazdı"), tek
+  başına anlamsız kalan genel isimler ve birimler ("yapı", "dönem", "dolar") ile özel adın tek
+  parçası seçilmez. Uygun kelime yoksa o sahnede vurgu öğesi gösterilmez. Biçimbilim çözümlemesi
+  yerel `zeyrek` kütüphanesiyle yapılır (`src/tr_nouns.py`).
 - **Çeşitlilik:** aynı sahne tipi en fazla 60 sn kesintisiz sürer; her 90 sn'lik aralıkta en az 2
   farklı tip vardır. **Art arda iki alıntı kartı gelmez:** ikinci alıntı, o cümlede söylenen bir
   yıla (zaman çizelgesi), rakama (rakam kartı), markaya (logo) ya da kişiye (fotoğraf; soyadı da
-  yeter) çevrilir; hiçbiri yoksa **anahtar kelime kartına** dönüşür: o an söylenen 1-3 kelime
-  (tek kelime, özel ad ya da niteleyici + isim; çekimli fiil/ortaç değil), büyük, tırnaksız, sol
+  yeter) çevrilir; hiçbiri yoksa **anahtar kelime kartına** dönüşür: o an söylenen bir isim ya da
+  isim tamlaması (aşağıdaki isim kuralı), büyük, tırnaksız, sol
   hizalı, son kelime vurgu renginde ve solda dikey vurgu çubuğuyla - alıntı kartından belirgin
   şekilde farklı. **Alıntı kartı bir videodaki sahnelerin en fazla üçte biridir;** aşan kısım
   anahtar kelime kartına çevrilir. Eleştirmen ikisini de ölçer. (Yalnızca uzun video; short'lar
