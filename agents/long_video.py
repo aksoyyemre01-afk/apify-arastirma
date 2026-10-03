@@ -48,7 +48,10 @@ def cfg() -> dict:
          "max_seconds": 360, "margin": 0.10, "gemini_short_reserve_usd": 1.50, "qa_rounds": 1,
          "tts_context": False, "section_gap_sec": long_planner.SECTION_GAP,
          "excluded_source_domains": ["facebook.com", "instagram.com", "twitter.com", "x.com", "tiktok.com", "linkedin.com",
-                                     "reddit.com", "pinterest.com", "threads.net", "youtube.com", "youtu.be"]}
+                                     "reddit.com", "pinterest.com", "threads.net", "youtube.com", "youtu.be",
+                                     # blog platformları
+                                     "medium.com", "substack.com", "blogspot.com", "wordpress.com", "tumblr.com",
+                                     "blogger.com", "wix.com", "weebly.com", "hashnode.dev", "dev.to"]}
     return {**d, **CONFIG.get("long", {})}
 
 
@@ -639,6 +642,7 @@ def measure(d: Path, script: LongVideoScript, props: dict, marks: list, dry_run:
                        ("Ekran 4 sn'den fazla sabit kalmıyor", long_planner.static_violations(props)),
                        ("Sahne tipi çeşitliliği (60 sn / 90 sn)", long_planner.variety_violations(props)),
                        ("Art arda iki alıntı kartı yok", long_planner.quote_run_violations(props)),
+                       ("Alıntı kartı en fazla sahnelerin üçte biri", long_planner.quote_share_violation(props)),
                        ("YouTube bölümleri geçerli", long_planner.chapter_problems(marks, dur))):
         check(name, not viol, "; ".join(viol[:3]) or "uygun")
     if dry_run:  # sessiz sahte ses yazıya dökülemez

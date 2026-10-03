@@ -71,7 +71,8 @@ export type SceneProps =
   | ChartScene
   | QuoteScene
   | PhotoScene
-  | ChapterScene;
+  | ChapterScene
+  | KeywordScene;
 
 export type CaptionPage = {
   from: number;
@@ -113,6 +114,8 @@ export type Accent = {at: number; text: string};
 export type PhotoRef = {name: string; src: string; focus?: string};
 export type PhotoScene = SceneBaseLong & {type: 'photo'; photo: PhotoRef | null};
 export type ChapterScene = SceneBaseLong & {type: 'chapter'; title: string};
+// Anahtar kelime kartı (yalnız uzun video): o an söylenen 1-3 kelime, sol hizalı, tırnaksız.
+export type KeywordScene = SceneBaseLong & {type: 'keyword'; text: string};
 
 export type ThumbnailProps = {
   width: number;

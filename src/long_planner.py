@@ -128,16 +128,79 @@ def break_quote_runs(scenes: list[dict], timings: list[dict], brands: list[str],
             cand = dict(sc)
             screen_rules._convert(cand, win, seen, "quote", [x for x in brands if screen_rules._norm(x) not in near],
                                   logo_ref, out[-1:])
+            if cand["type"] == "quote":
+                cand = keyword_card(sc, win, seen) or cand  # başka uygun tip yoksa anahtar kelime kartı
             if cand["type"] != "quote":
                 out.append(cand)
                 seen.update(screen_rules._signatures(cand))
                 continue
-            if (sc["from"] + sc["durationInFrames"] - prev["from"]) / FPS <= MAX_SCENE:
-                prev["durationInFrames"] = sc["from"] + sc["durationInFrames"] - prev["from"]
-                continue  # birleşik alıntı: ikinci cümle vurgu öğesiyle (accents) ekrana girer
         out.append(sc)
         seen.update(screen_rules._signatures(sc))
-    return out
+    return limit_quote_share(out, timings, seen)
+
+
+QUOTE_SHARE_MAX = 1 / 3  # alıntı kartı en fazla tüm sahnelerin üçte biri
+# Anahtar kelime olmaz: çekimli fiil/ortaç/mastar sonları ("edildi", "sürükledi", "edildiği", "çıkması").
+_VERBISH = re.compile(r"(d[ıiuü]|t[ıiuü]|yor|mış|miş|muş|müş|acak|ecek|d[ıi]ğ[ıi]|t[ıi]ğ[ıi]|mak|mek|ması|mesi|masını|mesini|"
+                      r"d[ıi]lar|d[ıi]ler|m[ıi]şt[ıi]|yord[ıu])$")
+# İsimle birlikte anahtar ifade oluşturabilen niteleyiciler ("sahte vaatler", "korkunç sır").
+_QUALIFIERS = {"sahte", "büyük", "korkunç", "tutarsız", "yanlış", "hatalı", "gizli", "acı", "tarihi", "güçlü", "masum",
+               "kontrolsüz", "abartılı", "geleneksel", "ticari", "resmi", "yüzlerce", "binlerce", "milyarlarca"}
+
+
+def keyword_card(sc: dict, win, seen: set[str]) -> dict | None:
+    """O anda söylenen en anlamlı 1-3 kelime (art arda gelmeyen, daha önce gösterilmemiş)."""
+    raw = [w.strip(".,!?;:\"'’") for w in win.core]
+    words = [re.split(r"['’]", w)[0] for w in raw]  # "Vadisi'ni" -> "Vadisi"
+    def ok(w):
+        n = screen_rules._norm(w)
+        return len(n) >= 4 and n not in screen_rules._DANGLING and not _VERBISH.search(n)
+    cands = []
+    for i, w in enumerate(words):
+        if not ok(w):
+            continue
+        cands.append([w])
+        if i + 1 < len(words) and ok(words[i + 1]):
+            proper = w[:1].isupper() and words[i + 1][:1].isupper() and i > 0  # "Silikon Vadisi"
+            if proper or screen_rules._norm(w) in _QUALIFIERS:               # "sahte vaatler"
+                cands.append([w, words[i + 1]])
+    best, best_score = None, 0
+    for phrase in cands:
+        text = " ".join(phrase)
+        score = sum(len(x) for x in phrase) + (6 if re.search(r"\d", text) else 0) + (4 if len(phrase) > 1 else 0)
+        if score > best_score and screen_rules._sig(text) not in seen:
+            best, best_score = text, score
+    if not best:
+        return None
+    base = {k: sc[k] for k in ("from", "durationInFrames", "variant", "chips", "tone") if k in sc}
+    return {**base, "type": "keyword", "text": best, "label": "", "variant": 0}
+
+
+def limit_quote_share(scenes: list[dict], timings: list[dict], seen: set[str]) -> list[dict]:
+    """Alıntı oranı üçte biri aşarsa, aşan kadar alıntı (en uzunlardan başlayarak, komşusu anahtar
+    kelime olmayanlar) anahtar kelime kartına çevrilir."""
+    def share():
+        return sum(s["type"] == "quote" for s in scenes) / max(len(scenes), 1)
+    order = sorted((i for i, s in enumerate(scenes) if s["type"] == "quote"), key=lambda i: -scenes[i]["durationInFrames"])
+    for i in order:
+        if share() <= QUOTE_SHARE_MAX:
+            break
+        if any(0 <= j < len(scenes) and scenes[j]["type"] == "keyword" for j in (i - 1, i + 1)):
+            continue
+        sc = scenes[i]
+        win = screen_rules._Window(timings, sc["from"] / FPS, (sc["from"] + sc["durationInFrames"]) / FPS)
+        kw = keyword_card(sc, win, seen)
+        if kw:
+            seen.difference_update(screen_rules._signatures(sc))
+            scenes[i] = kw
+            seen.update(screen_rules._signatures(kw))
+    return scenes
+
+
+def quote_share_violation(props: dict) -> list[str]:
+    s = props["scenes"]
+    q = sum(x["type"] == "quote" for x in s)
+    return [] if q <= len(s) * QUOTE_SHARE_MAX else [f"{q}/{len(s)} sahne alıntı (%{q / len(s) * 100:.0f} > %33)"]
 
 
 def quote_run_violations(props: dict) -> list[str]:

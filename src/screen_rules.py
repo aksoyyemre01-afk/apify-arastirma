@@ -26,7 +26,7 @@ _SCALE_WORDS = ("trilyon", "milyar", "milyon", "bin")
 _TEXT_FIELDS = {  # tip -> (alan, props anahtarı) listesi: ekranda yazı olarak görünenler
     "quote": ["text"], "timeline": ["year", "text"], "big_number": ["value_unit"],
     "comparison": ["leftValue", "rightValue"], "chart": ["pointLabels", "endValue"], "logo_intro": [],
-    "photo": [], "chapter": ["title"],
+    "photo": [], "chapter": ["title"], "keyword": ["text"],
 }
 
 

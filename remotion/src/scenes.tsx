@@ -8,6 +8,7 @@ import {
   BigNumberScene,
   ChapterScene,
   ChartScene,
+  KeywordScene,
   ComparisonScene,
   LogoIntroScene,
   PhotoScene,
@@ -556,6 +557,41 @@ const Accents: React.FC<{accents: Accent[]}> = ({accents}) => {
   );
 };
 
+// ---------------------------------------------------------------- keyword (uzun video)
+// Anahtar kelime kartı: alıntıdan belirgin şekilde farklı - sol hizalı, tırnaksız, vurgu renginde
+// büyük harfli 1-3 kelime ve solda dikey vurgu çubuğu. Kelimeler sırayla soldan kayarak girer
+// (yalnızca opacity + translate; ölçekleme yok).
+const Keyword: React.FC<{s: KeywordScene}> = ({s}) => {
+  const frame = useCurrentFrame();
+  const {palette} = useTheme();
+  const L = useLayout();
+  const words = s.text.split(/\s+/).filter(Boolean).slice(0, 3);
+  const size = fitFont(words.reduce((a, w) => (w.length > a.length ? w : a), ''), contentW(L) - sz(L, 120), sz(L, 210), 0.72);
+  const bar = px(interpolate(frame, [0, 14], [0, 1], {...clamp, easing: EASE_IN_OUT}) * size * words.length * 1.05);
+  const top = s.chips.length ? L.contentTopWithChips : L.contentTop;
+  return (
+    <SceneFrame durationInFrames={s.durationInFrames} variant={s.variant} chips={s.chips}>
+      <div style={{position: 'absolute', top, bottom: L.height - L.contentBottom, left: L.sidePadding + sz(L, 40), right: L.sidePadding,
+                   display: 'flex', alignItems: 'center'}}>
+        <div style={{width: sz(L, 18), height: bar, background: palette.accent, borderRadius: sz(L, 9), marginRight: sz(L, 48), flexShrink: 0}} />
+        <div lang="tr" style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
+          {words.map((w, i) => {
+            const e = enterProgress(frame, 4 + i * 5, 12);
+            return (
+              <span key={i} style={{fontFamily: HEADING, fontWeight: 900, fontSize: size, lineHeight: 1.02, letterSpacing: 2,
+                                    textTransform: 'uppercase', color: i === words.length - 1 ? palette.accent : palette.text,
+                                    opacity: e, transform: `translateX(${px((1 - e) * -sz(L, 80))}px)`, ...MOVING}}>
+                {w}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+      <Label text={s.label} top={L.labelTopLow} />
+    </SceneFrame>
+  );
+};
+
 export const SceneView: React.FC<{scene: SceneProps}> = ({scene}) => (
   <>
     <SceneBody scene={scene} />
@@ -581,6 +617,8 @@ const SceneBody: React.FC<{scene: SceneProps}> = ({scene}) => {
       return <Photo s={scene} />;
     case 'chapter':
       return <Chapter s={scene} />;
+    case 'keyword':
+      return <Keyword s={scene} />;
     default:
       return <AbsoluteFill />;
   }

@@ -215,10 +215,14 @@ formata özgü şu değerler farklıdır:
 - **Çeşitlilik:** aynı sahne tipi en fazla 60 sn kesintisiz sürer; her 90 sn'lik aralıkta en az 2
   farklı tip vardır. **Art arda iki alıntı kartı gelmez:** ikinci alıntı, o cümlede söylenen bir
   yıla (zaman çizelgesi), rakama (rakam kartı), markaya (logo) ya da kişiye (fotoğraf; soyadı da
-  yeter) çevrilir; hiçbiri yoksa iki cümle tek alıntı kartında birleşir (en fazla 8 sn). Bu da
-  mümkün değilse ölçüm ihlali raporlar (editör kararı gerekir).
-- **Açıklama kaynakları:** sosyal medya siteleri (facebook, instagram, x/twitter, tiktok, linkedin,
-  reddit, pinterest, threads, youtube) yayın açıklamasının kaynak listesine girmez
+  yeter) çevrilir; hiçbiri yoksa **anahtar kelime kartına** dönüşür: o an söylenen 1-3 kelime
+  (tek kelime, özel ad ya da niteleyici + isim; çekimli fiil/ortaç değil), büyük, tırnaksız, sol
+  hizalı, son kelime vurgu renginde ve solda dikey vurgu çubuğuyla - alıntı kartından belirgin
+  şekilde farklı. **Alıntı kartı bir videodaki sahnelerin en fazla üçte biridir;** aşan kısım
+  anahtar kelime kartına çevrilir. Eleştirmen ikisini de ölçer. (Yalnızca uzun video; short'lar
+  değişmez.)
+- **Açıklama kaynakları:** sosyal medya siteleri ve blog platformları (facebook, instagram, x/twitter, tiktok, linkedin,
+  reddit, pinterest, threads, youtube; medium, substack, blogspot, wordpress, tumblr vb.) yayın açıklamasının kaynak listesine girmez
   (`config/pipeline.json` → `long.excluded_source_domains`).
 - **Fotoğraf:** Wikimedia Commons'tan, yalnızca serbest lisanslı (CC0, kamu malı, CC BY, CC BY-SA);
   kişi/kurumun Wikidata resmi görseli (yanlış kişi gelmez). Fotoğraf o ad söylenirken görünür.
